@@ -886,3 +886,31 @@ Tabs.MiscTab:Toggle({
         end
     end,
 })
+
+local Players = game:GetService("Players")
+local speaker = Players.LocalPlayer
+
+Tabs.MiscTab:Slider({
+    Title = "WalkSpeed",
+    Desc = "Adjust your character's walking speed",
+  --Flag = "WalkSpeedSlider",
+ IsTooltip = true,
+    IsTextbox = true, -- Pwede mong gawing false kung ayaw mo ng textbox
+    Step = 1,
+    Value = {
+        Min = 0,
+        Max = 1000,
+        Default = 16, -- 16 ang default walkspeed sa Roblox
+    },
+    Callback = function(value)
+        pcall(function()
+            local char = speaker.Character
+            if char then
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.WalkSpeed = value
+                end
+            end
+        end)
+    end,
+})
