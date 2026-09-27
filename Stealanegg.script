@@ -124,138 +124,56 @@ local Grey = Color3.fromHex("#83889E")
 local Blue = Color3.fromHex("#257AF7")
 local Red = Color3.fromHex("#EF4F1D")
 
--- Humanoid Swap Anti-Death Bypass (Jump-Fixed Version)
-
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-
-local function safe(fn, ...)
-    local ok, res = pcall(fn, ...)
-    if not ok then warn("[HumanoidSwap] " .. tostring(res)) end
-    return ok, res
-end
-
-local function snapshotHumanoid(hum)
-    local data = {
-        JumpPower      = hum.JumpPower,
-        JumpHeight     = hum.JumpHeight,
-        UseJumpPower   = hum.UseJumpPower,
-        EvaluateStateMachine = hum.EvaluateStateMachine,
-        WalkSpeed      = hum.WalkSpeed,
-        States = {},
-    }
-    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
-        data.States[state] = hum:GetStateEnabled(state)
-    end
-    return data
-end
-
-local function restoreHumanoid(hum, data)
-    safe(function() hum.UseJumpPower = data.UseJumpPower end)
-    safe(function() hum.JumpPower    = data.JumpPower end)
-    safe(function() hum.JumpHeight   = data.JumpHeight end)
-    safe(function() hum.WalkSpeed    = data.WalkSpeed end)
-    -- SIGURADUHING enabled ang jump-related states BAGO ang EvaluateStateMachine
-    safe(function() hum:SetStateEnabled(Enum.HumanoidStateType.Jumping,  true) end)
-    safe(function() hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true) end)
-    safe(function() hum:SetStateEnabled(Enum.HumanoidStateType.Landed,   true) end)
-    safe(function() hum:SetStateEnabled(Enum.HumanoidStateType.Running,  true) end)
-    safe(function() hum:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, true) end)
-    -- Ibalik ang lahat ng orihinal na states
-    for state, enabled in pairs(data.States) do
-        safe(function() hum:SetStateEnabled(state, enabled) end)
-    end
-    -- HULI ang EvaluateStateMachine para hindi ito ma-override ng SetStateEnabled
-    safe(function() hum.EvaluateStateMachine = data.EvaluateStateMachine end)
-end
-
-local function lockHealth(hum)
-    safe(function()
-        hum.MaxHealth = math.huge
-        hum.Health    = math.huge
-    end)
-end
-
-local function blockDeathState(hum)
-    safe(function() hum.BreakJointsOnDeath = false end)
-    safe(function() hum.RequiresNeck        = false end)
-    safe(function() hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false) end)
-end
-
-local function bindAntiDeath(hum)
-    safe(function()
-        hum.HealthChanged:Connect(function()
-            if hum.Health < hum.MaxHealth then
-                safe(function() hum.Health = hum.MaxHealth end)
-            end
-        end)
-    end)
-    safe(function()
-        hum.Died:Connect(function()
-            safe(function()
-                hum:ChangeState(Enum.HumanoidStateType.Running)
-                hum.Health = math.huge
-            end)
-        end)
-    end)
-end
-
--- 🔧 BAGONG RefreshControls — hindi na nagre-require bawat swap
-local cachedPlayerModule
-local function refreshControls()
-    safe(function()
-        if not cachedPlayerModule then
-            cachedPlayerModule = require(player.PlayerScripts:WaitForChild("PlayerModule"))
-        end
-        local controls = cachedPlayerModule:GetControls()
-        if controls and controls.OnCharacterAdded then
-            controls:OnCharacterAdded(player.Character)
-        end
-    end)
-end
-
 local function swapHumanoid(character, oldHumanoid)
     local data = snapshotHumanoid(oldHumanoid)
 
-    -- 1. Clone bago mag-destroy
     local newHumanoid = oldHumanoid:Clone()
     newHumanoid.Name = "Humanoid"
 
-    -- 2. Ilipat lahat ng children
     for _, child in ipairs(oldHumanoid:GetChildren()) do
         safe(function() child.Parent = newHumanoid end)
     end
 
-    -- 3. I-parent MUNA ang new bago i-destroy ang old
-    --    (para walang frame na walang Humanoid sa Character)
     safe(function() newHumanoid.Parent = character end)
-
-    -- 4. Ngayon lang i-destroy ang old
     safe(function() oldHumanoid:Destroy() end)
 
-    -- 5. Restore properties (jump states muna, EvaluateStateMachine huli)
+    -- 1. Restore properties (jump states, EvaluateStateMachine huli)
     restoreHumanoid(newHumanoid, data)
 
-    -- 6. Anti-death
+    -- 2. 🔓 UNLOCK MOVEMENT — alisin ang treadmill/trap lock
+    unlockMovement(newHumanoid)
+
+    -- 3. Anti-death
     lockHealth(newHumanoid)
     blockDeathState(newHumanoid)
     bindAntiDeath(newHumanoid)
 
-    -- 7. Camera
+    -- 4. Camera
     safe(function()
         workspace.CurrentCamera.CameraSubject = newHumanoid
     end)
 
-    -- 8. Refresh controls PAGKATAPOS ng lahat ng properties set
+    -- 5. Refresh controls
     task.defer(refreshControls)
 
-    -- 9. Background loop
+    -- 6. Background loop — idagdag ang movement re-check
     task.spawn(function()
         while newHumanoid.Parent do
             safe(function()
                 newHumanoid.Health = math.huge
                 newHumanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-                if newHumanoid:GetState() == Enum.HumanoidStateType.Dead then
+
+                -- 🔁 Paulit-ulit na i-check kung naka-trap muli
+                if newHumanoid.PlatformStand then
+                    newHumanoid.PlatformStand = false
+                end
+                if newHumanoid.WalkSpeed <= 0 then
+                    newHumanoid.WalkSpeed = 16
+                end
+                if newHumanoid:GetState() == Enum.HumanoidStateType.Dead
+                   or newHumanoid:GetState() == Enum.HumanoidStateType.Physics
+                   or newHumanoid:GetState() == Enum.HumanoidStateType.PlatformStanding
+                then
                     newHumanoid:ChangeState(Enum.HumanoidStateType.Running)
                 end
             end)
@@ -263,36 +181,18 @@ local function swapHumanoid(character, oldHumanoid)
         end
     end)
 
-    -- 10. Double-check
+    -- 7. Double-check — idagdag ang unlockMovement
     task.delay(0.25, function()
         if not newHumanoid.Parent then return end
         safe(function()
-            restoreHumanoid(newHumanoid, data) -- ⬅ ibalik ulit jump states
+            restoreHumanoid(newHumanoid, data)
+            unlockMovement(newHumanoid)   -- 🔓 ulit
             lockHealth(newHumanoid)
             blockDeathState(newHumanoid)
         end)
-        refreshControls() -- ⬅ at i-refresh ulit ang controls
+        refreshControls()
     end)
 end
-
-local function onCharacterAdded(character)
-    task.spawn(function()
-        local humanoid = character:WaitForChild("Humanoid", 5)
-        if not humanoid then return end
-        -- Hintayin muna na matapos ang default na setup ng character
-        task.wait(0.1)
-        swapHumanoid(character, humanoid)
-    end)
-end
-
-player.CharacterAdded:Connect(onCharacterAdded)
-
-task.spawn(function()
-    if player.Character then
-        onCharacterAdded(player.Character)
-    end
-end)
-
 -- */ Other Functions /* --
 local function parseJSON(luau_table, indent, level, visited)
 	indent = indent or 2
