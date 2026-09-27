@@ -71,7 +71,7 @@ end
 
 -- */  Window  /* --
 local Window = WindUI:CreateWindow({
-	Title = ".FlorenceArgenty  |  Scott",
+	Title = ".Florence  |  LaterBeacheeee",
 	--Author = "by .ftgs • Footagesus",
 	Folder = "ftgshub",
 	Icon = "solar:folder-2-bold-duotone",
@@ -109,7 +109,7 @@ local Window = WindUI:CreateWindow({
 -- */  Tags  /* --
 do
 	Window:Tag({
-		Title = "v" .. WindUI.Version,
+		Title = "Florence" .. WindUI.Version,
 		Icon = "github",
 		Color = Color3.fromHex("#1c1c1c"),
 		Border = true,
@@ -399,7 +399,7 @@ local SPOT_1_SAFE   = CFrame.new(500.6, 70.3, -366.7)
 local SPOT_2        = CFrame.new(546.8, 70.3, -364.4)
 
 -- Speeds
-local INSTANT_SPEED = 9999   
+local INSTANT_SPEED = 99999   
 local SLIDE_SPEED   = 600    
 
 local currentSavedCFrame = nil
