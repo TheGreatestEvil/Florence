@@ -71,7 +71,7 @@ end
 
 -- */  Window  /* --
 local Window = WindUI:CreateWindow({
-	Title = ".Florence  |  LaterBeacheeee",
+	Title = ".FlorenceArgenty  |  Scott",
 	--Author = "by .ftgs • Footagesus",
 	Folder = "ftgshub",
 	Icon = "solar:folder-2-bold-duotone",
@@ -83,7 +83,7 @@ local Window = WindUI:CreateWindow({
 	HideSearchBar = false,
 
 	OpenButton = {
-		Title = "Florence Argenty", -- can be changed
+		Title = "Florence Argenty/Scott", -- can be changed
 		CornerRadius = UDim.new(1, 0), -- fully rounded
 		StrokeThickness = 3, -- removing outline
 		Enabled = true, -- enable or disable openbutton
@@ -109,7 +109,7 @@ local Window = WindUI:CreateWindow({
 -- */  Tags  /* --
 do
 	Window:Tag({
-		Title = "Florence" .. WindUI.Version,
+		Title = "v" .. WindUI.Version,
 		Icon = "github",
 		Color = Color3.fromHex("#1c1c1c"),
 		Border = true,
@@ -124,75 +124,9 @@ local Grey = Color3.fromHex("#83889E")
 local Blue = Color3.fromHex("#257AF7")
 local Red = Color3.fromHex("#EF4F1D")
 
-local function swapHumanoid(character, oldHumanoid)
-    local data = snapshotHumanoid(oldHumanoid)
 
-    local newHumanoid = oldHumanoid:Clone()
-    newHumanoid.Name = "Humanoid"
 
-    for _, child in ipairs(oldHumanoid:GetChildren()) do
-        safe(function() child.Parent = newHumanoid end)
-    end
 
-    safe(function() newHumanoid.Parent = character end)
-    safe(function() oldHumanoid:Destroy() end)
-
-    -- 1. Restore properties (jump states, EvaluateStateMachine huli)
-    restoreHumanoid(newHumanoid, data)
-
-    -- 2. 🔓 UNLOCK MOVEMENT — alisin ang treadmill/trap lock
-    unlockMovement(newHumanoid)
-
-    -- 3. Anti-death
-    lockHealth(newHumanoid)
-    blockDeathState(newHumanoid)
-    bindAntiDeath(newHumanoid)
-
-    -- 4. Camera
-    safe(function()
-        workspace.CurrentCamera.CameraSubject = newHumanoid
-    end)
-
-    -- 5. Refresh controls
-    task.defer(refreshControls)
-
-    -- 6. Background loop — idagdag ang movement re-check
-    task.spawn(function()
-        while newHumanoid.Parent do
-            safe(function()
-                newHumanoid.Health = math.huge
-                newHumanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-
-                -- 🔁 Paulit-ulit na i-check kung naka-trap muli
-                if newHumanoid.PlatformStand then
-                    newHumanoid.PlatformStand = false
-                end
-                if newHumanoid.WalkSpeed <= 0 then
-                    newHumanoid.WalkSpeed = 16
-                end
-                if newHumanoid:GetState() == Enum.HumanoidStateType.Dead
-                   or newHumanoid:GetState() == Enum.HumanoidStateType.Physics
-                   or newHumanoid:GetState() == Enum.HumanoidStateType.PlatformStanding
-                then
-                    newHumanoid:ChangeState(Enum.HumanoidStateType.Running)
-                end
-            end)
-            task.wait(0.1)
-        end
-    end)
-
-    -- 7. Double-check — idagdag ang unlockMovement
-    task.delay(0.25, function()
-        if not newHumanoid.Parent then return end
-        safe(function()
-            restoreHumanoid(newHumanoid, data)
-            unlockMovement(newHumanoid)   -- 🔓 ulit
-            lockHealth(newHumanoid)
-            blockDeathState(newHumanoid)
-        end)
-        refreshControls()
-    end)
-end
 -- */ Other Functions /* --
 local function parseJSON(luau_table, indent, level, visited)
 	indent = indent or 2
@@ -454,7 +388,6 @@ Tabs.PlayerTab:Toggle({
     end,
 })
 
-
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -468,7 +401,7 @@ local SPOT_1_SAFE   = CFrame.new(500.6, 70.3, -366.7)
 local SPOT_2        = CFrame.new(546.8, 70.3, -364.4)
 
 -- Speeds
-local INSTANT_SPEED = 99999   
+local INSTANT_SPEED = 9999   
 local SLIDE_SPEED   = 600    
 
 local currentSavedCFrame = nil
@@ -574,4 +507,382 @@ Tabs.PlayerTab:Toggle({
 	Callback = function(state)
 		isEnabled = state
 	end,
-})  
+})
+
+
+
+local Tabs = {
+    MiscTab = Window:Tab({
+        Title = "Misc",
+        Icon = "bird",
+    }),
+}
+
+
+--[[
+    Humanoid Swap Anti-Death Bypass
+    --------------------------------
+    - Cinoclone ang OldHumanoid, transfer lahat ng children, destroy old, parent clone
+    - Sine-save/restore: JumpPower, JumpHeight, UseJumpPower, EvaluateStateMachine,
+      at lahat ng 16 HumanoidStateType enabled states
+    - LockHealth: MaxHealth/Health = math.huge
+    - BlockDeathState: Dead=false, BreakJointsOnDeath=false, RequiresNeck=false
+    - BindAntiDeath: HealthChanged + Died events
+    - Background loop (0.1s): force-heal + disable Dead state
+    - RefreshControls via PlayerModule
+    - Camera.CameraSubject = NewHumanoid
+    - Double-check pattern after 0.25s
+    - Bound to Player.CharacterAdded + initial task.spawn
+    - Lahat ng operations nasa pcall()
+    - Hindi pinipigilan ang respawn — sine-swap lang ang humanoid pagka-load
+--]]
+
+-- ============================================================
+-- SERVICES
+-- ============================================================
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local StarterGui        = game:GetService("StarterGui")
+
+local LocalPlayer       = Players.LocalPlayer
+local Camera            = Workspace.CurrentCamera
+
+-- ============================================================
+-- CONFIG / STATE
+-- ============================================================
+local isEnabled = false
+
+-- Lahat ng 16 na HumanoidStateType
+local ALL_STATES = {
+    Enum.HumanoidStateType.FallingDown,
+    Enum.HumanoidStateType.Ragdoll,
+    Enum.HumanoidStateType.GettingUp,
+    Enum.HumanoidStateType.Landed,
+    Enum.HumanoidStateType.Flying,
+    Enum.HumanoidStateType.Freefall,
+    Enum.HumanoidStateType.Seated,
+    Enum.HumanoidStateType.PlatformStanding,
+    Enum.HumanoidStateType.Dead,
+    Enum.HumanoidStateType.Swimming,
+    Enum.HumanoidStateType.Climbing,
+    Enum.HumanoidStateType.StrafingNoPhysics,
+    Enum.HumanoidStateType.Running,
+    Enum.HumanoidStateType.RunningNoPhysics,
+    Enum.HumanoidStateType.Physics,
+    Enum.HumanoidStateType.None,
+}
+
+-- Connections na kailangan i-disconnect kapag disable
+local ActiveConnections = {}
+
+local function track(conn)
+    if conn then
+        table.insert(ActiveConnections, conn)
+    end
+    return conn
+end
+
+local function clearConnections()
+    for _, c in ipairs(ActiveConnections) do
+        pcall(function() c:Disconnect() end)
+    end
+    ActiveConnections = {}
+end
+
+-- ============================================================
+-- HELPERS
+-- ============================================================
+local function safe(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        warn("[AntiDeath] " .. tostring(err))
+    end
+    return ok
+end
+
+-- ============================================================
+-- SAVE / RESTORE HUMANOID PROPERTIES
+-- ============================================================
+local function SaveHumanoidProps(hum)
+    local saved = {}
+    pcall(function() saved.JumpPower          = hum.JumpPower          end)
+    pcall(function() saved.JumpHeight         = hum.JumpHeight         end)
+    pcall(function() saved.UseJumpPower       = hum.UseJumpPower       end)
+    pcall(function() saved.EvaluateStateMachine = hum.EvaluateStateMachine end)
+    pcall(function()
+        saved.States = {}
+        for _, st in ipairs(ALL_STATES) do
+            saved.States[st] = hum:GetStateEnabled(st)
+        end
+    end)
+    return saved
+end
+
+local function RestoreHumanoidProps(hum, saved)
+    if not saved then return end
+    pcall(function() if saved.JumpPower          ~= nil then hum.JumpPower          = saved.JumpPower          end end)
+    pcall(function() if saved.JumpHeight         ~= nil then hum.JumpHeight         = saved.JumpHeight         end end)
+    pcall(function() if saved.UseJumpPower       ~= nil then hum.UseJumpPower       = saved.UseJumpPower       end end)
+    pcall(function() if saved.EvaluateStateMachine ~= nil then hum.EvaluateStateMachine = saved.EvaluateStateMachine end end)
+    if saved.States then
+        for st, enabled in pairs(saved.States) do
+            pcall(function() hum:SetStateEnabled(st, enabled) end)
+        end
+    end
+end
+
+-- ============================================================
+-- LOCK HEALTH
+-- ============================================================
+local function LockHealth(hum)
+    safe(function()
+        hum.MaxHealth = math.huge
+        hum.Health    = math.huge
+    end)
+end
+
+-- ============================================================
+-- BLOCK DEATH STATE
+-- ============================================================
+local function BlockDeathState(hum)
+    safe(function() hum.BreakJointsOnDeath = false end)
+    safe(function() hum.RequiresNeck       = false end)
+    safe(function() hum.Dead               = false end)
+end
+
+-- ============================================================
+-- BIND ANTI-DEATH EVENTS
+-- ============================================================
+local function BindAntiDeath(hum)
+    track(hum.HealthChanged:Connect(function(h)
+        if not isEnabled then return end
+        pcall(function()
+            if h < hum.MaxHealth then
+                hum.Health = hum.MaxHealth
+            end
+        end)
+    end))
+
+    track(hum.Died:Connect(function()
+        if not isEnabled then return end
+        pcall(function()
+            hum.Dead   = false
+            hum.Health = math.huge
+        end)
+    end))
+end
+
+-- ============================================================
+-- BACKGROUND LOOP
+-- ============================================================
+local function StartBackgroundLoop(hum)
+    track(RunService.Heartbeat:Connect(function()
+        -- throttle sa 0.1s
+        local now = tick()
+        if not hum.Parent then return end
+        if not isEnabled then return end
+        if hum._lastAntiDeathTick and (now - hum._lastAntiDeathTick) < 0.1 then
+            return
+        end
+        hum._lastAntiDeathTick = now
+
+        pcall(function()
+            if hum.Health < hum.MaxHealth then
+                hum.Health = math.huge
+            end
+            if hum:GetStateEnabled(Enum.HumanoidStateType.Dead) then
+                hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+            end
+        end)
+    end))
+end
+
+-- ============================================================
+-- REFRESH CONTROLS
+-- ============================================================
+local function RefreshControls(player, character)
+    safe(function()
+        local PlayerModule = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
+        local controls = PlayerModule:GetControls()
+        if controls and controls.OnCharacterAdded then
+            controls:OnCharacterAdded(character)
+        end
+    end)
+end
+
+-- ============================================================
+-- HUMANOD SWAP
+-- ============================================================
+local function SwapHumanoid(character)
+    if not character then return end
+
+    -- Hintayin ang lumang humanoid
+    local oldHum = character:FindFirstChildOfClass("Humanoid")
+    if not oldHum then
+        local timeout = tick() + 5
+        repeat
+            task.wait(0.05)
+            oldHum = character:FindFirstChildOfClass("Humanoid")
+        until oldHum or tick() > timeout
+    end
+    if not oldHum then
+        warn("[AntiDeath] Walang Humanoid na nahanap sa character.")
+        return
+    end
+
+    -- 1) I-save ang properties bago i-swap
+    local saved = SaveHumanoidProps(oldHum)
+
+    -- 2) I-clone ang old humanoid
+    local newHum
+    safe(function() newHum = oldHum:Clone() end)
+    if not newHum then
+        warn("[AntiDeath] Hindi ma-clone ang Humanoid.")
+        return
+    end
+
+    -- 3) I-transfer lahat ng children mula old -> new
+    safe(function()
+        for _, child in ipairs(oldHum:GetChildren()) do
+            pcall(function() child.Parent = newHum end)
+        end
+    end)
+
+    -- 4) I-destroy ang old
+    safe(function() oldHum:Destroy() end)
+
+    -- 5) I-parent ang clone sa Character
+    safe(function() newHum.Parent = character end)
+
+    -- 6) I-restore ang saved properties
+    RestoreHumanoidProps(newHum, saved)
+
+    -- 7) LockHealth + BlockDeathState + BindAntiDeath
+    LockHealth(newHum)
+    BlockDeathState(newHum)
+    BindAntiDeath(newHum)
+
+    -- 8) Background loop
+    StartBackgroundLoop(newHum)
+
+    -- 9) RefreshControls
+    RefreshControls(LocalPlayer, character)
+
+    -- 10) Camera subject
+    safe(function()
+        if Camera then
+            Camera.CameraSubject = newHum
+        end
+    end)
+
+    -- 11) Double-check pattern pagka-0.25s
+    task.delay(0.25, function()
+        if not isEnabled then return end
+        safe(function()
+            local h = character:FindFirstChildOfClass("Humanoid")
+            if h then
+                LockHealth(h)
+                BlockDeathState(h)
+                RestoreHumanoidProps(h, saved)
+                if Camera then
+                    Camera.CameraSubject = h
+                end
+            end
+        end)
+    end)
+
+    return newHum
+end
+
+-- ============================================================
+-- CHARACTER HANDLER
+-- ============================================================
+local function OnCharacterAdded(character)
+    if not isEnabled then return end
+
+    -- Hintayin ang Humanoid
+    task.spawn(function()
+        local hum = character:WaitForChild("Humanoid", 10)
+        if not hum then return end
+        task.wait(0.1) -- hayaan ang default systems mag-load muna
+        if isEnabled then
+            SwapHumanoid(character)
+        end
+    end)
+end
+
+-- ============================================================
+-- ENABLE / DISABLE
+-- ============================================================
+local CharacterAddedConn
+
+local function Enable()
+    isEnabled = true
+
+    -- I-bind sa Player.CharacterAdded
+    if CharacterAddedConn then
+        pcall(function() CharacterAddedConn:Disconnect() end)
+    end
+    CharacterAddedConn = LocalPlayer.CharacterAdded:Connect(OnCharacterAdded)
+
+    -- Initial task.spawn (kung may character na)
+    task.spawn(function()
+        local char = LocalPlayer.Character
+        if char and isEnabled then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                task.wait(0.1)
+                if isEnabled then
+                    SwapHumanoid(char)
+                end
+            end
+        end
+    end)
+end
+
+local function Disable()
+    isEnabled = false
+    clearConnections()
+    if CharacterAddedConn then
+        pcall(function() CharacterAddedConn:Disconnect() end)
+        CharacterAddedConn = nil
+    end
+end
+
+-- ============================================================
+-- UI LIBRARY (placeholder — palitan ng aktwal na library mo)
+-- ============================================================
+--[[
+    IMPORTANTE:
+    Palitan ang `Tabs` at ang UI library reference ng aktwal na library mo.
+    Ang code sa ibaba ay gumagamit ng standard na Toggle API na binanggit mo.
+
+    Halimbawa kung may UI library ka na:
+        local Library = loadstring(game:HttpGet("..."))()
+        local Tabs    = Library:CreateWindow(...):AddTab(...)
+--]]
+
+-- Placeholder para hindi mag-error kung wala pang UI library:
+local Tabs = Tabs or {
+    PlayerTab = {
+        Toggle = function(_, cfg)
+            -- Fallback: kung wala pang UI, i-auto-enable via command bar
+            if cfg.Callback then cfg.Callback(true) end
+        end
+    }
+}
+
+Tabs.MiscTab:Toggle({
+    Title = "Anti Death",
+    Desc  = "only when event is happening (Sometimes Not Work)",
+    Value = false,
+    Callback = function(state)
+        isEnabled = state
+        if state then
+            Enable()
+        else
+            Disable()
+        end
+    end,
+})
