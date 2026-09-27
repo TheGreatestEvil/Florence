@@ -124,6 +124,249 @@ local Grey = Color3.fromHex("#83889E")
 local Blue = Color3.fromHex("#257AF7")
 local Red = Color3.fromHex("#EF4F1D")
 
+--[[
+    Humanoid Swap Anti-Death Bypass
+    ---------------------------------
+    Layunin: Pagpalitan ang Humanoid ng bago pagka-load ng character,
+    i-lock ang health, i-block ang Dead state, at i-bind ang anti-death events.
+    Hindi pinipigilan ang respawn — ang humanoid lang ang ini-swap pagka-load.
+--]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then return end
+
+-- ============ CONSTANTS ============
+local HUMAN_STATE_TYPES = {
+    Enum.HumanoidStateType.FallingDown,
+    Enum.HumanoidStateType.Ragdoll,
+    Enum.HumanoidStateType.GettingUp,
+    Enum.HumanoidStateType.Jumping,
+    Enum.HumanoidStateType.Landed,
+    Enum.HumanoidStateType.Flying,
+    Enum.HumanoidStateType.Freefall,
+    Enum.HumanoidStateType.Seated,
+    Enum.HumanoidStateType.PlatformStanding,
+    Enum.HumanoidStateType.Dead,
+    Enum.HumanoidStateType.Swimming,
+    Enum.HumanoidStateType.Running,
+    Enum.HumanoidStateType.RunningNoPhysics,
+    Enum.HumanoidStateType.StrafingNoPhysics,
+    Enum.HumanoidStateType.Climbing,
+    Enum.HumanoidStateType.Physics,
+}
+
+local HEARTBEAT_INTERVAL = 0.1
+local VERIFY_DELAY = 0.25
+
+-- ============ HELPERS ============
+local function safeCall(fn, ...)
+    local ok, result = pcall(fn, ...)
+    if not ok then
+        warn("[HS-ADB] pcall error: " .. tostring(result))
+    end
+    return ok, result
+end
+
+-- ============ REFRESH CONTROLS ============
+local function refreshControls()
+    safeCall(function()
+        local playerModule = require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
+        local controls = playerModule:GetControls()
+        if controls and controls.OnCharacterAdded then
+            controls:OnCharacterAdded()
+        end
+    end)
+end
+
+-- ============ SNAPSHOT / RESTORE HUMAN STATE ============
+local function snapshotHumanoid(hum)
+    local snap = {
+        JumpPower = hum.JumpPower,
+        JumpHeight = hum.JumpHeight,
+        UseJumpPower = hum.UseJumpPower,
+        EvaluateStateMachine = hum.EvaluateStateMachine,
+        EnabledStates = {},
+    }
+    for _, state in ipairs(HUMAN_STATE_TYPES) do
+        snap.EnabledStates[state] = hum:GetStateEnabled(state)
+    end
+    return snap
+end
+
+local function restoreHumanoid(hum, snap)
+    if not hum or not snap then return end
+    safeCall(function() hum.JumpPower = snap.JumpPower end)
+    safeCall(function() hum.JumpHeight = snap.JumpHeight end)
+    safeCall(function() hum.UseJumpPower = snap.UseJumpPower end)
+    safeCall(function() hum.EvaluateStateMachine = snap.EvaluateStateMachine end)
+    for state, enabled in pairs(snap.EnabledStates) do
+        safeCall(function() hum:SetStateEnabled(state, enabled) end)
+    end
+end
+
+-- ============ ANTI-DEATH UTILITIES ============
+local function lockHealth(hum)
+    safeCall(function() hum.MaxHealth = math.huge end)
+    safeCall(function() hum.Health = math.huge end)
+end
+
+local function blockDeathState(hum)
+    safeCall(function() hum.BreakJointsOnDeath = false end)
+    safeCall(function() hum.RequiresNeck = false end)
+    safeCall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false) end)
+end
+
+local function bindAntiDeath(hum)
+    safeCall(function()
+        hum.HealthChanged:Connect(function()
+            if hum.Health < hum.MaxHealth then
+                safeCall(function() hum.Health = math.huge end)
+            end
+        end)
+    end)
+    safeCall(function()
+        hum.Died:Connect(function()
+            safeCall(function()
+                hum.Health = math.huge
+                hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+            end)
+        end)
+    end)
+end
+
+-- ============ MAIN SWAP LOGIC ============
+local currentConnection = nil
+
+local function onCharacterAdded(character)
+    -- I-disconnect ang dating connection kung meron
+    if currentConnection then
+        safeCall(function() currentConnection:Disconnect() end)
+        currentConnection = nil
+    end
+
+    task.spawn(function()
+        -- 1) Hintayin ang Humanoid
+        local oldHum
+        safeCall(function()
+            oldHum = character:WaitForChild("Humanoid", 10)
+        end)
+        if not oldHum then return end
+
+        -- 2) Snapshot bago palitan
+        local snap
+        safeCall(function() snap = snapshotHumanoid(oldHum) end)
+        if not snap then return end
+
+        -- 3) I-clone ang OldHumanoid
+        local newHum
+        safeCall(function()
+            newHum = oldHum:Clone()
+            newHum.Name = "Humanoid"
+            -- Linisin ang mga connections/values sa clone
+            newHum.Health = math.huge
+            newHum.MaxHealth = math.huge
+        end)
+        if not newHum then return end
+
+        -- 4) I-transfer lahat ng children (maliban sa Humanoid mismo)
+        safeCall(function()
+            for _, child in ipairs(oldHum:GetChildren()) do
+                child.Parent = newHum
+            end
+        end)
+
+        -- 5) I-parent ang clone sa Character
+        safeCall(function() newHum.Parent = character end)
+
+        -- 6) I-destroy ang old Humanoid
+        safeCall(function() oldHum:Destroy() end)
+
+        -- 7) I-restore ang mga settings
+        restoreHumanoid(newHum, snap)
+
+        -- 8) I-lock ang health at i-block ang death
+        lockHealth(newHum)
+        blockDeathState(newHum)
+
+        -- 9) I-bind ang anti-death events
+        bindAntiDeath(newHum)
+
+        -- 10) I-refresh ang controls
+        refreshControls()
+
+        -- 11) I-set ang camera subject
+        safeCall(function()
+            local cam = workspace.CurrentCamera
+            if cam then
+                cam.CameraSubject = newHum
+            end
+        end)
+
+        -- 12) Background loop every 0.1s
+        local heartbeatConn
+        safeCall(function()
+            heartbeatConn = RunService.Heartbeat:Connect(function()
+                safeCall(function()
+                    if newHum and newHum.Parent then
+                        if newHum.Health < newHum.MaxHealth then
+                            newHum.Health = math.huge
+                        end
+                        newHum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+                        if newHum:GetState() == Enum.HumanoidStateType.Dead then
+                            newHum:ChangeState(Enum.HumanoidStateType.Running)
+                        end
+                    end
+                end)
+            end)
+        end)
+
+        -- I-cleanup ang heartbeat kapag nawala ang character
+        safeCall(function()
+            local cleanupConn
+            cleanupConn = character.AncestryChanged:Connect(function()
+                if not character:IsDescendantOf(game) then
+                    if heartbeatConn then heartbeatConn:Disconnect() end
+                    if cleanupConn then cleanupConn:Disconnect() end
+                end
+            end)
+        end)
+
+        -- 13) After 0.25s, i-verify at i-reapply lahat (double-check)
+        task.delay(VERIFY_DELAY, function()
+            safeCall(function()
+                if not newHum or not newHum.Parent then return end
+                lockHealth(newHum)
+                blockDeathState(newHum)
+                restoreHumanoid(newHum, snap)
+                refreshControls()
+                local cam = workspace.CurrentCamera
+                if cam then cam.CameraSubject = newHum end
+            end)
+        end)
+
+        -- I-save ang heartbeat connection para sa next swap
+        currentConnection = heartbeatConn
+    end)
+end
+
+-- ============ BIND SA PLAYER ============
+safeCall(function()
+    LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+end)
+
+-- Initial spawn (kung may character na)
+task.spawn(function()
+    safeCall(function()
+        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        onCharacterAdded(char)
+    end)
+end)
+
+print("[HS-ADB] Humanoid Swap Anti-Death Bypass loaded.")
+
 -- */ Other Functions /* --
 local function parseJSON(luau_table, indent, level, visited)
 	indent = indent or 2
@@ -505,4 +748,5 @@ Tabs.PlayerTab:Toggle({
 	Callback = function(state)
 		isEnabled = state
 	end,
-})
+})  
+
