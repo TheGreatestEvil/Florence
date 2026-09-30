@@ -47,22 +47,22 @@ WindUI.Creator.AddIcons("solar", {
 function createPopup()
 	return WindUI:Popup({
 		Title = "Florence",
-		Icon = "bird",
+		Icon = "rbxassetid://79268589053692",
 		Content = "Hello!",
 		Buttons = {
 			{
 				Title = "Hahaha",
-				Icon = "bird",
+				Icon = "rbxassetid://79268589053692",
 				Variant = "Tertiary",
 			},
 			{
 				Title = "Hahaha",
-				Icon = "bird",
+				Icon = "79268589053692",
 				Variant = "Tertiary",
 			},
 			{
 				Title = "Hahaha",
-				Icon = "bird",
+				Icon = "rbxassetid://79268589053692",
 				Variant = "Tertiary",
 			},
 		},
@@ -71,10 +71,17 @@ end
 
 -- */  Window  /* --
 local Window = WindUI:CreateWindow({
-	Title = ".FlorenceArgenty  |  Scott",
+	Title = "FlorenceArgenty  |  Scott",
 	--Author = "by .ftgs • Footagesus",
 	Folder = "ftgshub",
-	Icon = "solar:folder-2-bold-duotone",
+	Icon = "rbxassetid://79268589053692",
+	Size = UDim2.fromOffset(580, 460), 
+    MinSize = Vector2.new(560, 350), 
+     MaxSize = Vector2.new(850, 560), 
+   BackgroundImageTransparency = 0.42, 
+    Background = "rbxassetid://79268589053692", 
+    
+	
 	--Theme = "Mellowsi",
 	--IconSize = 22*2,
 	NewElements = true,
@@ -110,7 +117,7 @@ local Window = WindUI:CreateWindow({
 do
 	Window:Tag({
 		Title = "v" .. WindUI.Version,
-		Icon = "github",
+		Icon = "121572094465765",
 		Color = Color3.fromHex("#1c1c1c"),
 		Border = true,
 	})
@@ -260,7 +267,7 @@ end
 local Tabs = {
     PlayerTab = Window:Tab({
         Title = "Players",
-        Icon = "bird",
+        Icon = "121572094465765",
     }),
 }
 
@@ -514,7 +521,7 @@ Tabs.PlayerTab:Toggle({
 local Tabs = {
     MiscTab = Window:Tab({
         Title = "Misc",
-        Icon = "bird",
+        Icon = "121572094465765",
     }),
 }
 
@@ -875,7 +882,7 @@ local Tabs = Tabs or {
 
 Tabs.MiscTab:Toggle({
     Title = "Anti Death",
-    Desc  = "only when event is happening (Sometimes Not Work)",
+    Desc  = "Use only for Admin Egg Abuse and don't use Treadmill once this is Enabled or you'll stuck",
     Value = false,
     Callback = function(state)
         isEnabled = state
@@ -893,7 +900,7 @@ local speaker = Players.LocalPlayer
 Tabs.MiscTab:Slider({
     Title = "WalkSpeed",
     Desc = "Adjust your character's walking speed",
-  --Flag = "WalkSpeedSlider",
+--Flag = "WalkSpeedSlider",
  IsTooltip = true,
     IsTextbox = true, -- Pwede mong gawing false kung ayaw mo ng textbox
     Step = 1,
