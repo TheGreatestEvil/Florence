@@ -1,1127 +1,660 @@
---=====================================================================
---  KILLER SCANNER  —  GUI + ESP Scanner + Color Customizer
---                    + Minimize & Close Buttons
---  Place in: StarterPlayer > StarterPlayerScripts  (LocalScript)
---=====================================================================
+local RunService = game:GetService("RunService")
+--[[
 
-local Players          = game:GetService("Players")
-local Workspace        = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
+    WindUI Example (wip) — with Killerost Scanner
 
-local LOCAL_PLAYER = Players.LocalPlayer
-local PLAYER_GUI   = LOCAL_PLAYER:WaitForChild("PlayerGui")
+]]
 
---============================== CONFIG ===============================
-local CONFIG = {
-	Keyword             = "killer",
-	ScanInterval        = 1.5,
-	FillColor           = Color3.fromRGB(255, 0, 0),
-	OutlineColor        = Color3.fromRGB(255, 45, 45),
-	FillTransparency    = 0.55,
-	OutlineTransparency = 0,
-	IgnoreLocalPlayer   = true,
-	ShowNameTag         = true,
-	TagText             = "KILLER",
-	ToggleKey           = Enum.KeyCode.RightControl, -- press to hide/show window
-}
+local cloneref = (cloneref or clonereference or function(instance)
+	return instance
+end)
+local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
+local HttpService = cloneref(game:GetService("HttpService"))
 
-local FULL_SIZE  = UDim2.new(0, 320, 0, 620)
-local MINI_SIZE  = UDim2.new(0, 320, 0, 34)
+local WindUI
 
---============================= HELPERS ===============================
-local function new(class, props, parent)
-	local inst = Instance.new(class)
-	for k, v in pairs(props) do
-		inst[k] = v
+do
+	local ok, result = pcall(function()
+		return require("./src/Init")
+	end)
+
+	if ok then
+		WindUI = result
+	else
+		if cloneref(game:GetService("RunService")):IsStudio() then
+			WindUI = require(cloneref(ReplicatedStorage:WaitForChild("WindUI"):WaitForChild("Init")))
+		else
+			WindUI =
+				loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+		end
 	end
-	if parent then
-		inst.Parent = parent
-	end
-	return inst
 end
 
-local function colorToHex(c)
-	return string.format("#%02X%02X%02X",
-		math.floor(c.R * 255 + 0.5),
-		math.floor(c.G * 255 + 0.5),
-		math.floor(c.B * 255 + 0.5))
+function createPopup()
+	return WindUI:Popup({
+		Title = "Florence",
+		Icon = "rbxassetid://79268589053692",
+		Content = "Hello!",
+		Buttons = {
+			{
+				Title = "Hahaha",
+				Icon = "rbxassetid://79268589053692",
+				Variant = "Tertiary",
+			},
+			{
+				Title = "Hahaha",
+				Icon = "79268589053692",
+				Variant = "Tertiary",
+			},
+			{
+				Title = "Hahaha",
+				Icon = "rbxassetid://79268589053692",
+				Variant = "Tertiary",
+			},
+		},
+	})
 end
 
-local function hexToColor(s)
-	s = s:gsub("#", "")
-	if #s == 3 then
-		s = s:sub(1,1):rep(2) .. s:sub(2,2):rep(2) .. s:sub(3,3):rep(2)
-	end
-	if #s ~= 6 then return nil end
-	local n = tonumber(s, 16)
-	if not n then return nil end
-	return Color3.fromRGB(
-		bit32.band(bit32.rshift(n, 16), 0xFF),
-		bit32.band(bit32.rshift(n, 8), 0xFF),
-		bit32.band(n, 0xFF)
-	)
-end
+-- */  Window  /* --
+local Window = WindUI:CreateWindow({
+	Title = "FlorenceArgenty  |  Scott",
+	Folder = "ftgshub",
+	Icon = "rbxassetid://79268589053692",
+	Size = UDim2.fromOffset(580, 460),
+	MinSize = Vector2.new(560, 350),
+	MaxSize = Vector2.new(850, 560),
+	BackgroundImageTransparency = 0.42,
+	Background = "rbxassetid://79268589053692",
+	NewElements = true,
+	HideSearchBar = false,
 
---=============================== GUI =================================
-local gui = new("ScreenGui", {
-	Name = "KillerScanner",
-	ResetOnSpawn = false,
-	IgnoreGuiInset = true,
-	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-}, PLAYER_GUI)
+	OpenButton = {
+		Title = "Florence Argenty/Scott",
+		CornerRadius = UDim.new(1, 0),
+		StrokeThickness = 3,
+		Enabled = true,
+		Draggable = true,
+		OnlyMobile = false,
+		Scale = 0.5,
 
-local main = new("Frame", {
-	Name = "Main",
-	Position = UDim2.new(0, 20, 0, 20),
-	Size = FULL_SIZE,
-	BackgroundColor3 = Color3.fromRGB(18, 18, 22),
-	BorderSizePixel = 0,
-	ClipsDescendants = true,
-}, gui)
-new("UICorner", { CornerRadius = UDim.new(0, 10) }, main)
-new("UIStroke", { Color = Color3.fromRGB(255, 0, 0), Thickness = 1.5, Transparency = 0.35 }, main)
-
---============================ TITLE BAR ==============================
-local titleBar = new("Frame", {
-	Name = "TitleBar",
-	Size = UDim2.new(1, 0, 0, 34),
-	BackgroundColor3 = Color3.fromRGB(32, 32, 40),
-	BorderSizePixel = 0,
-}, main)
-new("UICorner", { CornerRadius = UDim.new(0, 10) }, titleBar)
-
-new("TextLabel", {
-	Size = UDim2.new(1, -80, 1, 0),
-	Position = UDim2.new(0, 12, 0, 0),
-	BackgroundTransparency = 1,
-	Text = "KILLER SCANNER",
-	TextColor3 = Color3.fromRGB(255, 70, 70),
-	Font = Enum.Font.GothamBold,
-	TextSize = 14,
-	TextXAlignment = Enum.TextXAlignment.Left,
-}, titleBar)
-
--- --- Minimize button ---
-local minBtn = new("TextButton", {
-	Name = "Minimize",
-	Size = UDim2.new(0, 26, 1, 0),
-	Position = UDim2.new(1, -60, 0, 0),
-	BackgroundTransparency = 1,
-	Text = "–",
-	TextColor3 = Color3.fromRGB(200, 200, 205),
-	Font = Enum.Font.GothamBold,
-	TextSize = 22,
-	AutoButtonColor = false,
-}, titleBar)
-new("TextButton", { -- invisible-ish hit shape placeholder not needed
+		Color = ColorSequence.new(
+			Color3.fromHex("#30FF6A"),
+			Color3.fromHex("#e7ff2f")
+		),
+	},
+	Topbar = {
+		Height = 44,
+		ButtonsType = "Mac",
+	},
 })
 
--- --- Close button ---
-local closeBtn = new("TextButton", {
-	Name = "Close",
-	Size = UDim2.new(0, 34, 1, 0),
-	Position = UDim2.new(1, -34, 0, 0),
-	BackgroundTransparency = 1,
-	Text = "×",
-	TextColor3 = Color3.fromRGB(200, 200, 205),
-	Font = Enum.Font.GothamBold,
-	TextSize = 20,
-	AutoButtonColor = false,
-}, titleBar)
-
--- Hover effects on the two buttons
-local function hoverFx(btn, hotColor)
-	btn.MouseEnter:Connect(function()
-		btn.TextColor3 = hotColor
-		btn.BackgroundTransparency = 0.75
-		btn.BackgroundColor3 = hotColor
-	end)
-	btn.MouseLeave:Connect(function()
-		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
-		btn.BackgroundTransparency = 1
-	end)
-end
-hoverFx(minBtn,  Color3.fromRGB(120, 200, 255))
-hoverFx(closeBtn,Color3.fromRGB(255, 70, 70))
-
---=========== Reopen pill (shown only after full close) ===============
-local reopenBtn = new("TextButton", {
-	Name = "Reopen",
-	Position = UDim2.new(0, 20, 0, 20),
-	Size = UDim2.new(0, 140, 0, 30),
-	BackgroundColor3 = Color3.fromRGB(25, 25, 30),
-	Text = "☰  Killer Scanner",
-	TextColor3 = Color3.fromRGB(255, 70, 70),
-	Font = Enum.Font.GothamBold,
-	TextSize = 12,
-	Visible = false,
-	ZIndex = 5,
-}, gui)
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, reopenBtn)
-new("UIStroke", { Color = Color3.fromRGB(255, 0, 0), Thickness = 1, Transparency = 0.4 }, reopenBtn)
-
-reopenBtn.MouseButton1Click:Connect(function()
-	reopenBtn.Visible = false
-	main.Visible = true
-end)
-
---==================== MINIMIZE / CLOSE BEHAVIOR ======================
-local minimized = false
-
-local function setMinimized(state)
-	minimized = state
-	if minimized then
-		main.Size = MINI_SIZE
-		main.Position = UDim2.new(
-			main.Position.X.Scale, main.Position.X.Offset,
-			main.Position.Y.Scale, main.Position.Y.Offset
-		)
-		minBtn.Text = "+"
-	else
-		main.Size = FULL_SIZE
-		minBtn.Text = "–"
-	end
-
-	-- hide everything except the title bar
-	statusLabel.Visible = not minimized
-	btnRow.Visible      = not minimized
-	tabBar.Visible      = not minimized
-	panelArea.Visible   = not minimized
-end
-
-minBtn.MouseButton1Click:Connect(function()
-	setMinimized(not minimized)
-end)
-
--- Close = hide the whole window and show the reopen pill
-closeBtn.MouseButton1Click:Connect(function()
-	main.Visible = false
-	reopenBtn.Visible = true
-end)
-
--- Extra: keyboard toggle (default RightControl) hides/shows window
-UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
-	if input.KeyCode == CONFIG.ToggleKey then
-		if main.Visible then
-			main.Visible = false
-			reopenBtn.Visible = true
-		else
-			main.Visible = true
-			reopenBtn.Visible = false
-		end
-	end
-end)
-
---========================== DRAGGABLE WINDOW =========================
+-- */  Tags  /* --
 do
-	local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+	Window:Tag({
+		Title = "v" .. WindUI.Version,
+		Icon = "121572094465765",
+		Color = Color3.fromHex("#1c1c1c"),
+		Border = true,
+	})
+end
 
-	titleBar.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch then
-			dragging  = true
-			dragStart = input.Position
-			startPos  = main.Position
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
+-- */  Colors  /* --
+local Purple = Color3.fromHex("#7775F2")
+local Yellow = Color3.fromHex("#ECA201")
+local Green = Color3.fromHex("#10C550")
+local Grey = Color3.fromHex("#83889E")
+local Blue = Color3.fromHex("#257AF7")
+local Red = Color3.fromHex("#EF4F1D")
+
+-- */ Other Functions /* --
+local function parseJSON(luau_table, indent, level, visited)
+	indent = indent or 2
+	level = level or 0
+	visited = visited or {}
+
+	local currentIndent = string.rep(" ", level * indent)
+	local nextIndent = string.rep(" ", (level + 1) * indent)
+
+	if luau_table == nil then
+		return "null"
+	end
+
+	local dataType = type(luau_table)
+
+	if dataType == "table" then
+		if visited[luau_table] then
+			return '"[Circular Reference]"'
+		end
+
+		visited[luau_table] = true
+
+		local isArray = true
+		local maxIndex = 0
+
+		for k, _ in pairs(luau_table) do
+			if type(k) == "number" and k > maxIndex then
+				maxIndex = k
+			end
+			if type(k) ~= "number" or k <= 0 or math.floor(k) ~= k then
+				isArray = false
+				break
+			end
+		end
+
+		local count = 0
+		for _ in pairs(luau_table) do
+			count = count + 1
+		end
+		if count ~= maxIndex and isArray then
+			isArray = false
+		end
+
+		if count == 0 then
+			return "{}"
+		end
+
+		if isArray then
+			if count == 0 then
+				return "[]"
+			end
+
+			local result = "[\n"
+
+			for i = 1, maxIndex do
+				result = result .. nextIndent .. parseJSON(luau_table[i], indent, level + 1, visited)
+				if i < maxIndex then
+					result = result .. ","
+				end
+				result = result .. "\n"
+			end
+
+			result = result .. currentIndent .. "]"
+			return result
+		else
+			local result = "{\n"
+			local first = true
+
+			local keys = {}
+			for k in pairs(luau_table) do
+				table.insert(keys, k)
+			end
+			table.sort(keys, function(a, b)
+				if type(a) == type(b) then
+					return tostring(a) < tostring(b)
+				else
+					return type(a) < type(b)
 				end
 			end)
+
+			for _, k in ipairs(keys) do
+				local v = luau_table[k]
+				if not first then
+					result = result .. ",\n"
+				else
+					first = false
+				end
+
+				if type(k) == "string" then
+					result = result .. nextIndent .. '"' .. k .. '": '
+				else
+					result = result .. nextIndent .. '"' .. tostring(k) .. '": '
+				end
+
+				result = result .. parseJSON(v, indent, level + 1, visited)
+			end
+
+			result = result .. "\n" .. currentIndent .. "}"
+			return result
 		end
-	end)
+	elseif dataType == "string" then
+		local escaped = luau_table:gsub("\\", "\\\\")
+		escaped = escaped:gsub('"', '\\"')
+		escaped = escaped:gsub("\n", "\\n")
+		escaped = escaped:gsub("\r", "\\r")
+		escaped = escaped:gsub("\t", "\\t")
 
-	titleBar.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement
-			or input.UserInputType == Enum.UserInputType.Touch then
-			dragInput = input
-		end
-	end)
-
-	UserInputService.InputChanged:Connect(function(input)
-		if input == dragInput and dragging then
-			local delta = input.Position - dragStart
-			main.Position = UDim2.new(
-				startPos.X.Scale, startPos.X.Offset + delta.X,
-				startPos.Y.Scale, startPos.Y.Offset + delta.Y
-			)
-		end
-	end)
-end
-
---========================== STATUS LABEL =============================
-local statusLabel = new("TextLabel", {
-	Position = UDim2.new(0, 12, 0, 42),
-	Size = UDim2.new(1, -24, 0, 18),
-	BackgroundTransparency = 1,
-	Text = "Scanning...",
-	TextColor3 = Color3.fromRGB(180, 180, 190),
-	Font = Enum.Font.Gotham,
-	TextSize = 12,
-	TextXAlignment = Enum.TextXAlignment.Left,
-}, main)
-
---=========================== BUTTON ROW ==============================
-local btnRow = new("Frame", {
-	Position = UDim2.new(0, 12, 0, 66),
-	Size = UDim2.new(1, -24, 0, 30),
-	BackgroundTransparency = 1,
-}, main)
-new("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal,
-	Padding = UDim.new(0, 8),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-}, btnRow)
-
-local function makeButton(text, order, parent)
-	local b = new("TextButton", {
-		Size = UDim2.new(0.5, -4, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(45, 45, 55),
-		BorderSizePixel = 0,
-		Text = text,
-		TextColor3 = Color3.fromRGB(235, 235, 240),
-		Font = Enum.Font.GothamMedium,
-		TextSize = 12,
-		LayoutOrder = order,
-	}, parent or btnRow)
-	new("UICorner", { CornerRadius = UDim.new(0, 6) }, b)
-	return b
-end
-
---============================ TAB BAR ================================
-local tabBar = new("Frame", {
-	Position = UDim2.new(0, 12, 0, 102),
-	Size = UDim2.new(1, -24, 0, 26),
-	BackgroundTransparency = 1,
-}, main)
-new("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal,
-	Padding = UDim.new(0, 6),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-}, tabBar)
-
-local function makeTab(text, order)
-	local t = new("TextButton", {
-		Size = UDim2.new(0.5, -3, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(35, 35, 44),
-		BorderSizePixel = 0,
-		Text = text,
-		TextColor3 = Color3.fromRGB(180, 180, 190),
-		Font = Enum.Font.GothamBold,
-		TextSize = 11,
-		LayoutOrder = order,
-	}, tabBar)
-	new("UICorner", { CornerRadius = UDim.new(0, 5) }, t)
-	return t
-end
-
-local listTab  = makeTab("DETECTED", 1)
-local colorTab = makeTab("COLOR", 2)
-
---===================== PANEL CONTAINER ===============================
-local panelArea = new("Frame", {
-	Position = UDim2.new(0, 12, 0, 134),
-	Size = UDim2.new(1, -24, 1, -146),
-	BackgroundTransparency = 1,
-}, main)
-
---========================= DETECTED PANEL ============================
-local listPanel = new("ScrollingFrame", {
-	Name = "ListPanel",
-	Size = UDim2.new(1, 0, 1, 0),
-	BackgroundColor3 = Color3.fromRGB(26, 26, 32),
-	BorderSizePixel = 0,
-	CanvasSize = UDim2.new(0, 0, 0, 0),
-	AutomaticCanvasSize = Enum.AutomaticSize.Y,
-	ScrollBarThickness = 4,
-	ScrollBarImageColor3 = Color3.fromRGB(255, 60, 60),
-	Visible = true,
-}, panelArea)
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, listPanel)
-new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, listPanel)
-new("UIPadding", {
-	PaddingTop = UDim.new(0, 6),
-	PaddingBottom = UDim.new(0, 6),
-	PaddingLeft = UDim.new(0, 6),
-	PaddingRight = UDim.new(0, 6),
-}, listPanel)
-
---========================= COLOR PANEL ===============================
-local colorPanel = new("ScrollingFrame", {
-	Name = "ColorPanel",
-	Size = UDim2.new(1, 0, 1, 0),
-	BackgroundColor3 = Color3.fromRGB(26, 26, 32),
-	BorderSizePixel = 0,
-	CanvasSize = UDim2.new(0, 0, 0, 0),
-	AutomaticCanvasSize = Enum.AutomaticSize.Y,
-	ScrollBarThickness = 4,
-	ScrollBarImageColor3 = Color3.fromRGB(255, 60, 60),
-	Visible = false,
-}, panelArea)
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, colorPanel)
-new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, colorPanel)
-new("UIPadding", {
-	PaddingTop = UDim.new(0, 10),
-	PaddingBottom = UDim.new(0, 10),
-	PaddingLeft = UDim.new(0, 10),
-	PaddingRight = UDim.new(0, 10),
-}, colorPanel)
-
-local function switchTab(which)
-	if which == "list" then
-		listPanel.Visible = true
-		colorPanel.Visible = false
-		listTab.BackgroundColor3  = Color3.fromRGB(65, 25, 25)
-		listTab.TextColor3        = Color3.fromRGB(255, 120, 120)
-		colorTab.BackgroundColor3 = Color3.fromRGB(35, 35, 44)
-		colorTab.TextColor3       = Color3.fromRGB(180, 180, 190)
+		return '"' .. escaped .. '"'
+	elseif dataType == "number" then
+		return tostring(luau_table)
+	elseif dataType == "boolean" then
+		return luau_table and "true" or "false"
+	elseif dataType == "function" then
+		return '"function"'
 	else
-		listPanel.Visible = false
-		colorPanel.Visible = true
-		listTab.BackgroundColor3  = Color3.fromRGB(35, 35, 44)
-		listTab.TextColor3        = Color3.fromRGB(180, 180, 190)
-		colorTab.BackgroundColor3 = Color3.fromRGB(65, 25, 25)
-		colorTab.TextColor3       = Color3.fromRGB(255, 120, 120)
+		return '"' .. dataType .. '"'
 	end
 end
 
-listTab.MouseButton1Click:Connect(function() switchTab("list") end)
-colorTab.MouseButton1Click:Connect(function() switchTab("color") end)
-switchTab("list")
-
---===================== ESP STORAGE ===================================
-local activeESP        = {}
-local trackedHumanoids = {}
-local espEnabled       = true
-
-local function clearESP(model)
-	local entry = activeESP[model]
-	if not entry then return end
-	activeESP[model] = nil
-	if entry.highlight then entry.highlight:Destroy() end
-	if entry.tag       then entry.tag:Destroy() end
+local function tableToClipboard(luau_table, indent)
+	indent = indent or 4
+	local jsonString = parseJSON(luau_table, indent)
+	setclipboard(jsonString)
+	return jsonString
 end
 
-local function applyESP(model, player, scriptObj, displayName)
-	local entry = activeESP[model]
+--==========================================================================
+--  KILLEROST SCANNER  —  integrated with WindUI
+--==========================================================================
 
-	if entry and entry.highlight and entry.highlight.Parent then
-		entry.player = player
-		entry.script = scriptObj
-		entry.name   = displayName
-		return
+local Players   = cloneref(game:GetService("Players"))
+local Workspace = cloneref(game:GetService("Workspace"))
+
+--=========================  CONFIG  =======================================
+local CONFIG = {
+	Keyword             = "killerost",
+	ScanInterval        = 3,
+	Debounce            = 0.6,
+	Fill                = Color3.fromRGB(255, 45, 45),
+	Outline             = Color3.fromRGB(255, 255, 255),
+	FillTransparency    = 0.45,
+	OutlineTransparency = 0,
+	NameTags            = true,
+	TagText             = "⚠️ Killer ⚠️",
+	TagFontSize         = 18,
+}
+
+--=========================  SCAN CORE  ====================================
+
+local tracked    = {}     -- [model] = { highlight, tag, label }
+local autoScan   = true
+local espEnabled = true
+
+local function getScriptText(obj)
+	local parts = { obj.Name, obj.Parent and obj.Parent.Name or "" }
+	local ok, src = pcall(function() return obj.Source end)
+	if ok and type(src) == "string" then parts[#parts + 1] = src end
+	if getscriptbytecode then
+		local ok2, bc = pcall(getscriptbytecode, obj)
+		if ok2 and type(bc) == "string" then parts[#parts + 1] = bc end
 	end
-
-	clearESP(model)
-
-	local highlight = new("Highlight", {
-		Name = "KillerESP_Highlight",
-		Adornee = model,
-		DepthMode = Enum.HighlightDepthMode.AlwaysOnTop,
-		FillColor = CONFIG.FillColor,
-		OutlineColor = CONFIG.OutlineColor,
-		FillTransparency = CONFIG.FillTransparency,
-		OutlineTransparency = CONFIG.OutlineTransparency,
-	}, gui)
-
-	local tag, tagLabel
-	if CONFIG.ShowNameTag then
-		local head = model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
-		if head then
-			tag = new("BillboardGui", {
-				Name = "KillerESP_Tag",
-				Adornee = head,
-				Size = UDim2.new(0, 160, 0, 34),
-				StudsOffset = Vector3.new(0, 3, 0),
-				AlwaysOnTop = true,
-				MaxDistance = 300,
-			}, gui)
-
-			tagLabel = new("TextLabel", {
-				Size = UDim2.new(1, 0, 1, 0),
-				BackgroundTransparency = 1,
-				Text = "⚠ " .. CONFIG.TagText .. " ⚠",
-				TextColor3 = CONFIG.OutlineColor,
-				TextStrokeColor3 = Color3.new(0, 0, 0),
-				TextStrokeTransparency = 0,
-				Font = Enum.Font.GothamBold,
-				TextScaled = true,
-			}, tag)
+	if getsenv then
+		local ok3, env = pcall(getsenv, obj)
+		if ok3 and type(env) == "table" then
+			for k in pairs(env) do parts[#parts + 1] = tostring(k) end
 		end
 	end
-
-	activeESP[model] = {
-		highlight = highlight,
-		tag       = tag,
-		tagLabel  = tagLabel,
-		player    = player,
-		script    = scriptObj,
-		name      = displayName,
-	}
+	return table.concat(parts, "\n")
 end
 
---============= GLOBAL COLOR REFRESH ==================================
-local function refreshAllColors()
-	for _, entry in pairs(activeESP) do
-		if entry.highlight then
-			entry.highlight.FillColor    = CONFIG.FillColor
-			entry.highlight.OutlineColor = CONFIG.OutlineColor
-			entry.highlight.FillTransparency    = CONFIG.FillTransparency
-			entry.highlight.OutlineTransparency = CONFIG.OutlineTransparency
-		end
-		if entry.tagLabel then
-			entry.tagLabel.TextColor3 = CONFIG.OutlineColor
-		end
-	end
+local function isHumanoidModel(inst)
+	return inst:IsA("Model") and inst:FindFirstChildOfClass("Humanoid") ~= nil
 end
 
---======================= SCRIPT DETECTION ============================
-local KEYWORD = string.lower(CONFIG.Keyword)
-
-local function isKillerScript(inst)
-	if not inst:IsA("LuaSourceContainer") then return false end
-	return string.sub(string.lower(inst.Name), 1, #KEYWORD) == KEYWORD
-end
-
-local function findKillerScript(container)
-	for _, d in ipairs(container:GetDescendants()) do
-		if isKillerScript(d) then
-			return d
+local function scanModelForKeyword(model)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript") then
+			local text = getScriptText(d)
+			if text ~= "" and string.find(string.lower(text), CONFIG.Keyword, 1, true) then
+				return d
+			end
 		end
 	end
 	return nil
 end
 
-local function getPlayerContainers(plr)
-	local list = {}
-	local function add(o)
-		if o then table.insert(list, o) end
+local function applyESP(model, scriptObj)
+	if tracked[model] then return end
+
+	local hl = Instance.new("Highlight")
+	hl.Name                = "KillerostESP"
+	hl.Adornee             = model
+	hl.FillColor           = CONFIG.Fill
+	hl.OutlineColor        = CONFIG.Outline
+	hl.FillTransparency    = CONFIG.FillTransparency
+	hl.OutlineTransparency = CONFIG.OutlineTransparency
+	hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
+	hl.Enabled             = espEnabled
+	hl.Parent              = model
+
+	local tag, lbl
+	if CONFIG.NameTags then
+		tag = Instance.new("BillboardGui")
+		tag.Name          = "KillerostTag"
+		tag.Adornee       = model
+		tag.Size          = UDim2.new(0, 240, 0, 44)
+		tag.StudsOffsetWorldSpace = Vector3.new(0, 3.5, 0)
+		tag.AlwaysOnTop   = true
+		tag.MaxDistance   = 1000
+		tag.Enabled       = espEnabled
+		tag.Parent        = model
+
+		lbl = Instance.new("TextLabel")
+		lbl.Size                   = UDim2.new(1, 0, 1, 0)
+		lbl.BackgroundTransparency = 1
+		lbl.Text                   = CONFIG.TagText
+		lbl.TextColor3             = CONFIG.Fill
+		lbl.TextStrokeTransparency = 0
+		lbl.TextStrokeColor3       = Color3.fromRGB(0, 0, 0)
+		lbl.Font                   = Enum.Font.GothamBold
+		lbl.TextSize               = CONFIG.TagFontSize
+		lbl.Parent                 = tag
 	end
-	add(plr.Character)
-	add(plr:FindFirstChildOfClass("Backpack"))
-	add(plr:FindFirstChildOfClass("PlayerGui"))
-	add(plr:FindFirstChild("PlayerScripts"))
-	add(plr:FindFirstChild("StarterGear"))
-	return list
+
+	tracked[model] = { highlight = hl, tag = tag, label = lbl }
 end
 
---=========================== GUI LIST ================================
-local function updateList(results)
-	for _, c in ipairs(listPanel:GetChildren()) do
-		if c:IsA("TextLabel") then
-			c:Destroy()
-		end
+local function clearESP()
+	for model, data in pairs(tracked) do
+		if data.highlight then data.highlight:Destroy() end
+		if data.tag       then data.tag:Destroy()       end
+		tracked[model] = nil
 	end
-
-	local count = 0
-	for _, data in pairs(results) do
-		count += 1
-		local row = new("TextLabel", {
-			Size = UDim2.new(1, 0, 0, 26),
-			BackgroundColor3 = Color3.fromRGB(48, 20, 20),
-			BorderSizePixel = 0,
-			Text = "  " .. data.name .. "  →  " .. data.script.Name,
-			TextColor3 = Color3.fromRGB(255, 115, 115),
-			Font = Enum.Font.Gotham,
-			TextSize = 12,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			LayoutOrder = count,
-		}, listPanel)
-		new("UICorner", { CornerRadius = UDim.new(0, 5) }, row)
-	end
-
-	if count == 0 then
-		new("TextLabel", {
-			Size = UDim2.new(1, 0, 0, 26),
-			BackgroundTransparency = 1,
-			Text = "  No killers detected",
-			TextColor3 = Color3.fromRGB(130, 130, 140),
-			Font = Enum.Font.Gotham,
-			TextSize = 12,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			LayoutOrder = 1,
-		}, listPanel)
-	end
-
-	return count
 end
 
---============================= SCAN ==================================
-local function scan()
-	local results      = {}
-	local totalChecked = 0
+local function setESPEnabled(state)
+	espEnabled = state
+	for _, data in pairs(tracked) do
+		if data.highlight then data.highlight.Enabled = state end
+		if data.tag       then data.tag.Enabled       = state end
+	end
+end
 
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if not (CONFIG.IgnoreLocalPlayer and plr == LOCAL_PLAYER) then
-			local char = plr.Character
-			local hum  = char and char:FindFirstChildOfClass("Humanoid")
-			if char and hum then
-				totalChecked += 1
-				local found
-				for _, container in ipairs(getPlayerContainers(plr)) do
-					found = findKillerScript(container)
-					if found then break end
+local function applyColor(color)
+	CONFIG.Fill = color
+	for _, data in pairs(tracked) do
+		if data.highlight then data.highlight.FillColor = color end
+		if data.label     then data.label.TextColor3   = color end
+	end
+end
+
+local function applyFillAlpha(v)
+	CONFIG.FillTransparency = v
+	for _, data in pairs(tracked) do
+		if data.highlight then data.highlight.FillTransparency = v end
+	end
+end
+
+local function applyOutlineAlpha(v)
+	CONFIG.OutlineTransparency = v
+	for _, data in pairs(tracked) do
+		if data.highlight then data.highlight.OutlineTransparency = v end
+	end
+end
+
+--=========================  FULL SCAN  ====================================
+local scanning = false
+local foundCount = 0
+
+local function fullScan()
+	if scanning then return 0 end
+	scanning = true
+
+	local found = 0
+
+	local ok, err = pcall(function()
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if isHumanoidModel(obj) then
+				local hit = scanModelForKeyword(obj)
+				if hit then
+					found += 1
+					applyESP(obj, hit)
 				end
-				if found then
-					results[char] = { player = plr, script = found, name = plr.Name }
-				end
-			end
-		end
-	end
-
-	for hum in pairs(trackedHumanoids) do
-		if hum.Parent == nil then
-			trackedHumanoids[hum] = nil
-		else
-			local model = hum.Parent
-			if model and not results[model] then
-				if not Players:GetPlayerFromCharacter(model) then
-					totalChecked += 1
-					local found = findKillerScript(model)
-					if found then
-						results[model] = { player = nil, script = found, name = model.Name }
-					end
-				end
-			end
-		end
-	end
-
-	if espEnabled then
-		for model, data in pairs(results) do
-			applyESP(model, data.player, data.script, data.name)
-		end
-	end
-
-	for model in pairs(activeESP) do
-		if not espEnabled or not results[model] or not model.Parent then
-			clearESP(model)
-		end
-	end
-
-	local count = updateList(results)
-	if espEnabled then
-		statusLabel.Text = ("Active  •  %d flagged  •  %d scanned"):format(count, totalChecked)
-	else
-		statusLabel.Text = ("ESP OFF  •  %d flagged"):format(count)
-	end
-
-	return results
-end
-
---========================== DEBOUNCED SCAN ===========================
-local scanQueued = false
-local function requestScan(delay)
-	if scanQueued then return end
-	scanQueued = true
-	task.delay(delay or 0.35, function()
-		scanQueued = false
-		scan()
-	end)
-end
-
---=========================== BUTTONS =================================
-local rescanBtn = makeButton("RESCAN", 1)
-rescanBtn.MouseButton1Click:Connect(function()
-	statusLabel.Text = "Scanning..."
-	scan()
-end)
-
-local toggleBtn = makeButton("ESP: ON", 2)
-toggleBtn.MouseButton1Click:Connect(function()
-	espEnabled = not espEnabled
-	toggleBtn.Text = espEnabled and "ESP: ON" or "ESP: OFF"
-	toggleBtn.BackgroundColor3 = espEnabled
-		and Color3.fromRGB(45, 45, 55)
-		or  Color3.fromRGB(75, 25, 25)
-	scan()
-end)
-
---=====================================================================
---                        COLOR CUSTOMIZER
---=====================================================================
-
-local previewFrame = new("Frame", {
-	Name = "Preview",
-	Size = UDim2.new(1, 0, 0, 44),
-	BackgroundColor3 = CONFIG.OutlineColor,
-	BorderSizePixel = 0,
-	LayoutOrder = 1,
-}, colorPanel)
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, previewFrame)
-local previewInner = new("Frame", {
-	Name = "Inner",
-	Size = UDim2.new(1, -8, 1, -8),
-	Position = UDim2.new(0, 4, 0, 4),
-	BackgroundColor3 = CONFIG.FillColor,
-	BackgroundTransparency = CONFIG.FillTransparency,
-	BorderSizePixel = 0,
-}, previewFrame)
-new("UICorner", { CornerRadius = UDim.new(0, 4) }, previewInner)
-
-local function sectionLabel(text, order)
-	return new("TextLabel", {
-		Size = UDim2.new(1, 0, 0, 16),
-		BackgroundTransparency = 1,
-		Text = text,
-		TextColor3 = Color3.fromRGB(160, 160, 170),
-		Font = Enum.Font.GothamBold,
-		TextSize = 11,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		LayoutOrder = order,
-	}, colorPanel)
-end
-
-local presetContainer = new("Frame", {
-	Size = UDim2.new(1, 0, 0, 30),
-	BackgroundTransparency = 1,
-	LayoutOrder = 3,
-}, colorPanel)
-new("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal,
-	Padding = UDim.new(0, 6),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-}, presetContainer)
-
-local PRESETS = {
-	{ name = "Red",    fill = Color3.fromRGB(255, 0, 0),    outline = Color3.fromRGB(255, 60, 60) },
-	{ name = "Orange", fill = Color3.fromRGB(255, 130, 0),  outline = Color3.fromRGB(255, 170, 60) },
-	{ name = "Yellow", fill = Color3.fromRGB(255, 230, 0),  outline = Color3.fromRGB(255, 245, 130) },
-	{ name = "Green",  fill = Color3.fromRGB(0, 255, 60),   outline = Color3.fromRGB(120, 255, 140) },
-	{ name = "Cyan",   fill = Color3.fromRGB(0, 220, 255),  outline = Color3.fromRGB(120, 240, 255) },
-	{ name = "Blue",   fill = Color3.fromRGB(60, 90, 255),  outline = Color3.fromRGB(140, 160, 255) },
-	{ name = "Purple", fill = Color3.fromRGB(180, 0, 255),  outline = Color3.fromRGB(220, 130, 255) },
-	{ name = "Pink",   fill = Color3.fromRGB(255, 60, 180), outline = Color3.fromRGB(255, 150, 220) },
-	{ name = "White",  fill = Color3.fromRGB(255, 255, 255),outline = Color3.fromRGB(255, 255, 255) },
-	{ name = "Black",  fill = Color3.fromRGB(20, 20, 20),   outline = Color3.fromRGB(90, 90, 90) },
-}
-
-for i, p in ipairs(PRESETS) do
-	local sw = new("TextButton", {
-		Size = UDim2.new(0, 26, 1, 0),
-		BackgroundColor3 = p.fill,
-		BorderSizePixel = 0,
-		Text = "",
-		LayoutOrder = i,
-	}, presetContainer)
-	new("UICorner", { CornerRadius = UDim.new(0, 5) }, sw)
-	new("UIStroke", {
-		Color = Color3.fromRGB(15, 15, 20),
-		Thickness = 1,
-		Transparency = 0.3,
-	}, sw)
-
-	sw.MouseButton1Click:Connect(function()
-		CONFIG.FillColor    = p.fill
-		CONFIG.OutlineColor = p.outline
-		if _G.__syncColorUI then _G.__syncColorUI() end
-	end)
-	sw.MouseEnter:Connect(function()
-		sw.Size = UDim2.new(0, 30, 1, 0)
-	end)
-	sw.MouseLeave:Connect(function()
-		sw.Size = UDim2.new(0, 26, 1, 0)
-	end)
-end
-
-sectionLabel("FILL COLOR", 4)
-sectionLabel("OUTLINE COLOR", 9)
-
-local function buildRGBSliders(parent, order, getColor, setColor)
-	local holder = new("Frame", {
-		Size = UDim2.new(1, 0, 0, 78),
-		BackgroundTransparency = 1,
-		LayoutOrder = order,
-	}, parent)
-
-	local labels = { "R", "G", "B" }
-	local colors = {
-		Color3.fromRGB(255, 70, 70),
-		Color3.fromRGB(70, 220, 90),
-		Color3.fromRGB(80, 140, 255),
-	}
-	local fillRefs, labelRefs = {}, {}
-
-	local function syncAllLocal()
-		local c = getColor()
-		local comps = { c.R, c.G, c.B }
-		for i = 1, 3 do
-			local frac = comps[i]
-			fillRefs[i].Size = UDim2.new(frac, 0, 1, 0)
-			labelRefs[i].knob.Position = UDim2.new(frac, 0, 0.5, 0)
-			labelRefs[i].value.Text = tostring(math.floor(frac * 255 + 0.5))
-		end
-		refreshAllColors()
-		previewFrame.BackgroundColor3 = CONFIG.OutlineColor
-		previewInner.BackgroundColor3 = CONFIG.FillColor
-	end
-
-	local function makeRow(i)
-		local row = new("Frame", {
-			Size = UDim2.new(1, 0, 0, 24),
-			Position = UDim2.new(0, 0, 0, (i - 1) * 26),
-			BackgroundTransparency = 1,
-		}, holder)
-
-		new("TextLabel", {
-			Size = UDim2.new(0, 16, 1, 0),
-			BackgroundTransparency = 1,
-			Text = labels[i],
-			TextColor3 = colors[i],
-			Font = Enum.Font.GothamBold,
-			TextSize = 12,
-		}, row)
-
-		local track = new("Frame", {
-			Position = UDim2.new(0, 20, 0.5, -6),
-			Size = UDim2.new(1, -60, 0, 12),
-			BackgroundColor3 = Color3.fromRGB(40, 40, 50),
-			BorderSizePixel = 0,
-		}, row)
-		new("UICorner", { CornerRadius = UDim.new(0, 6) }, track)
-
-		local fill = new("Frame", {
-			Size = UDim2.new(0, 0, 1, 0),
-			BackgroundColor3 = colors[i],
-			BorderSizePixel = 0,
-		}, track)
-		new("UICorner", { CornerRadius = UDim.new(0, 6) }, fill)
-
-		local knob = new("Frame", {
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.new(0, 0, 0.5, 0),
-			Size = UDim2.new(0, 16, 0, 16),
-			BackgroundColor3 = Color3.fromRGB(240, 240, 245),
-			BorderSizePixel = 0,
-			ZIndex = 2,
-		}, track)
-		new("UICorner", { CornerRadius = UDim.new(1, 0) }, knob)
-		new("UIStroke", { Color = Color3.fromRGB(15, 15, 20), Thickness = 1 }, knob)
-
-		local valueLbl = new("TextLabel", {
-			Position = UDim2.new(1, -36, 0, 0),
-			Size = UDim2.new(0, 36, 1, 0),
-			BackgroundTransparency = 1,
-			Text = "0",
-			TextColor3 = Color3.fromRGB(210, 210, 220),
-			Font = Enum.Font.Gotham,
-			TextSize = 11,
-			TextXAlignment = Enum.TextXAlignment.Right,
-		}, row)
-
-		local function updateFromX(x)
-			local rel = (x - track.AbsolutePosition.X) / track.AbsoluteSize.X
-			rel = math.clamp(rel, 0, 1)
-			local v = math.floor(rel * 255 + 0.5)
-			local c = getColor()
-			if i == 1 then
-				c = Color3.fromRGB(v, math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
-			elseif i == 2 then
-				c = Color3.fromRGB(math.floor(c.R * 255 + 0.5), v, math.floor(c.B * 255 + 0.5))
-			else
-				c = Color3.fromRGB(math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), v)
-			end
-			setColor(c)
-			syncAllLocal()
-			if _G.__syncHex then _G.__syncHex() end
-		end
-
-		local dragging = false
-		track.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch then
-				dragging = true
-				updateFromX(input.Position.X)
-			end
-		end)
-		UserInputService.InputChanged:Connect(function(input)
-			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-				or input.UserInputType == Enum.UserInputType.Touch) then
-				updateFromX(input.Position.X)
-			end
-		end)
-		UserInputService.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch then
-				dragging = false
-			end
-		end)
-
-		fillRefs[i]  = fill
-		labelRefs[i] = { knob = knob, value = valueLbl }
-	end
-
-	for i = 1, 3 do makeRow(i) end
-
-	return syncAllLocal
-end
-
-local syncFill    = buildRGBSliders(colorPanel, 5,
-	function() return CONFIG.FillColor end,
-	function(c) CONFIG.FillColor = c end)
-
-local syncOutline = buildRGBSliders(colorPanel, 10,
-	function() return CONFIG.OutlineColor end,
-	function(c) CONFIG.OutlineColor = c end)
-
--- Hex input rows
-local hexRow = new("Frame", {
-	Size = UDim2.new(1, 0, 0, 30),
-	BackgroundTransparency = 1,
-	LayoutOrder = 6,
-}, colorPanel)
-new("TextLabel", {
-	Size = UDim2.new(0, 40, 1, 0),
-	BackgroundTransparency = 1,
-	Text = "FILL",
-	TextColor3 = Color3.fromRGB(160, 160, 170),
-	Font = Enum.Font.GothamBold,
-	TextSize = 11,
-	TextXAlignment = Enum.TextXAlignment.Left,
-}, hexRow)
-local fillHexBox = new("TextBox", {
-	Position = UDim2.new(0, 44, 0, 0),
-	Size = UDim2.new(1, -44, 1, 0),
-	BackgroundColor3 = Color3.fromRGB(40, 40, 50),
-	BorderSizePixel = 0,
-	Text = colorToHex(CONFIG.FillColor),
-	TextColor3 = Color3.fromRGB(230, 230, 235),
-	PlaceholderText = "#RRGGBB",
-	PlaceholderColor3 = Color3.fromRGB(120, 120, 130),
-	Font = Enum.Font.Code,
-	TextSize = 12,
-	ClearTextOnFocus = false,
-}, hexRow)
-new("UICorner", { CornerRadius = UDim.new(0, 5) }, fillHexBox)
-new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, fillHexBox)
-
-local outlineHexRow = new("Frame", {
-	Size = UDim2.new(1, 0, 0, 30),
-	BackgroundTransparency = 1,
-	LayoutOrder = 11,
-}, colorPanel)
-new("TextLabel", {
-	Size = UDim2.new(0, 40, 1, 0),
-	BackgroundTransparency = 1,
-	Text = "LINE",
-	TextColor3 = Color3.fromRGB(160, 160, 170),
-	Font = Enum.Font.GothamBold,
-	TextSize = 11,
-	TextXAlignment = Enum.TextXAlignment.Left,
-}, outlineHexRow)
-local outlineHexBox = new("TextBox", {
-	Position = UDim2.new(0, 44, 0, 0),
-	Size = UDim2.new(1, -44, 1, 0),
-	BackgroundColor3 = Color3.fromRGB(40, 40, 50),
-	BorderSizePixel = 0,
-	Text = colorToHex(CONFIG.OutlineColor),
-	TextColor3 = Color3.fromRGB(230, 230, 235),
-	PlaceholderText = "#RRGGBB",
-	PlaceholderColor3 = Color3.fromRGB(120, 120, 130),
-	Font = Enum.Font.Code,
-	TextSize = 12,
-	ClearTextOnFocus = false,
-}, outlineHexRow)
-new("UICorner", { CornerRadius = UDim.new(0, 5) }, outlineHexBox)
-new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, outlineHexBox)
-
-fillHexBox.FocusLost:Connect(function()
-	local c = hexToColor(fillHexBox.Text)
-	if c then CONFIG.FillColor = c
-	else fillHexBox.Text = colorToHex(CONFIG.FillColor) end
-	syncFill(); refreshAllColors()
-	previewInner.BackgroundColor3 = CONFIG.FillColor
-end)
-
-outlineHexBox.FocusLost:Connect(function()
-	local c = hexToColor(outlineHexBox.Text)
-	if c then CONFIG.OutlineColor = c
-	else outlineHexBox.Text = colorToHex(CONFIG.OutlineColor) end
-	syncOutline(); refreshAllColors()
-	previewFrame.BackgroundColor3 = CONFIG.OutlineColor
-end)
-
--- Transparency slider
-sectionLabel("FILL TRANSPARENCY", 12)
-local transHolder = new("Frame", {
-	Size = UDim2.new(1, 0, 0, 24),
-	BackgroundTransparency = 1,
-	LayoutOrder = 13,
-}, colorPanel)
-local transTrack = new("Frame", {
-	Position = UDim2.new(0, 0, 0.5, -6),
-	Size = UDim2.new(1, -44, 0, 12),
-	BackgroundColor3 = Color3.fromRGB(40, 40, 50),
-	BorderSizePixel = 0,
-}, transHolder)
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, transTrack)
-local transFill = new("Frame", {
-	Size = UDim2.new(1 - CONFIG.FillTransparency, 0, 1, 0),
-	BackgroundColor3 = Color3.fromRGB(180, 180, 200),
-	BorderSizePixel = 0,
-}, transTrack)
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, transFill)
-local transKnob = new("Frame", {
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.new(1 - CONFIG.FillTransparency, 0, 0.5, 0),
-	Size = UDim2.new(0, 16, 0, 16),
-	BackgroundColor3 = Color3.fromRGB(240, 240, 245),
-	BorderSizePixel = 0,
-	ZIndex = 2,
-}, transTrack)
-new("UICorner", { CornerRadius = UDim.new(1, 0) }, transKnob)
-new("UIStroke", { Color = Color3.fromRGB(15, 15, 20), Thickness = 1 }, transKnob)
-local transValue = new("TextLabel", {
-	Position = UDim2.new(1, -36, 0, 0),
-	Size = UDim2.new(0, 36, 1, 0),
-	BackgroundTransparency = 1,
-	Text = tostring(math.floor((1 - CONFIG.FillTransparency) * 100 + 0.5)) .. "%",
-	TextColor3 = Color3.fromRGB(210, 210, 220),
-	Font = Enum.Font.Gotham,
-	TextSize = 11,
-	TextXAlignment = Enum.TextXAlignment.Right,
-}, transHolder)
-
-local function updateTransFromX(x)
-	local rel = (x - transTrack.AbsolutePosition.X) / transTrack.AbsoluteSize.X
-	rel = math.clamp(rel, 0, 1)
-	CONFIG.FillTransparency = 1 - rel
-	transFill.Size = UDim2.new(rel, 0, 1, 0)
-	transKnob.Position = UDim2.new(rel, 0, 0.5, 0)
-	transValue.Text = tostring(math.floor(rel * 100 + 0.5)) .. "%"
-	refreshAllColors()
-	previewInner.BackgroundTransparency = CONFIG.FillTransparency
-end
-
-do
-	local dragging = false
-	transTrack.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			updateTransFromX(input.Position.X)
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-			or input.UserInputType == Enum.UserInputType.Touch) then
-			updateTransFromX(input.Position.X)
-		end
-	end)
-	UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-end
-
--- Reset
-local resetBtn = new("TextButton", {
-	Size = UDim2.new(1, 0, 0, 30),
-	BackgroundColor3 = Color3.fromRGB(60, 25, 25),
-	BorderSizePixel = 0,
-	Text = "RESET TO DEFAULT",
-	TextColor3 = Color3.fromRGB(255, 130, 130),
-	Font = Enum.Font.GothamBold,
-	TextSize = 11,
-	LayoutOrder = 14,
-}, colorPanel)
-new("UICorner", { CornerRadius = UDim.new(0, 5) }, resetBtn)
-new("UIStroke", { Color = Color3.fromRGB(200, 60, 60), Thickness = 1, Transparency = 0.5 }, resetBtn)
-
-resetBtn.MouseButton1Click:Connect(function()
-	CONFIG.FillColor           = Color3.fromRGB(255, 0, 0)
-	CONFIG.OutlineColor        = Color3.fromRGB(255, 45, 45)
-	CONFIG.FillTransparency    = 0.55
-	CONFIG.OutlineTransparency = 0
-	fillHexBox.Text    = colorToHex(CONFIG.FillColor)
-	outlineHexBox.Text = colorToHex(CONFIG.OutlineColor)
-	transFill.Size = UDim2.new(1 - CONFIG.FillTransparency, 0, 1, 0)
-	transKnob.Position = UDim2.new(1 - CONFIG.FillTransparency, 0, 0.5, 0)
-	transValue.Text = tostring(math.floor((1 - CONFIG.FillTransparency) * 100 + 0.5)) .. "%"
-	syncFill(); syncOutline()
-	refreshAllColors()
-	previewFrame.BackgroundColor3 = CONFIG.OutlineColor
-	previewInner.BackgroundColor3 = CONFIG.FillColor
-	previewInner.BackgroundTransparency = CONFIG.FillTransparency
-end)
-
--- Global sync hook used by presets
-_G.__syncColorUI = function()
-	syncFill(); syncOutline()
-	fillHexBox.Text    = colorToHex(CONFIG.FillColor)
-	outlineHexBox.Text = colorToHex(CONFIG.OutlineColor)
-	previewFrame.BackgroundColor3 = CONFIG.OutlineColor
-	previewInner.BackgroundColor3 = CONFIG.FillColor
-	previewInner.BackgroundTransparency = CONFIG.FillTransparency
-	refreshAllColors()
-end
-
-_G.__syncHex = function()
-	fillHexBox.Text    = colorToHex(CONFIG.FillColor)
-	outlineHexBox.Text = colorToHex(CONFIG.OutlineColor)
-end
-
-syncFill(); syncOutline()
-
---======================= WORKSPACE TRACKING ==========================
-for _, d in ipairs(Workspace:GetDescendants()) do
-	if d:IsA("Humanoid") then
-		trackedHumanoids[d] = true
-	end
-end
-
-Workspace.DescendantAdded:Connect(function(d)
-	if d:IsA("Humanoid") then
-		trackedHumanoids[d] = true
-		requestScan(0.25)
-	elseif d:IsA("LuaSourceContainer") then
-		requestScan(0.25)
-	end
-end)
-
-Workspace.DescendantRemoving:Connect(function(d)
-	if d:IsA("Humanoid") then
-		trackedHumanoids[d] = nil
-	end
-end)
-
---======================= PLAYER TRACKING =============================
-local function hookCharacter(plr)
-	plr.CharacterAdded:Connect(function()
-		requestScan(0.25)
-	end)
-end
-
-Players.PlayerAdded:Connect(function(plr)
-	hookCharacter(plr)
-	requestScan(0.25)
-end)
-
-Players.PlayerRemoving:Connect(function(plr)
-	task.defer(function()
-		for model, entry in pairs(activeESP) do
-			if entry.player == plr then
-				clearESP(model)
 			end
 		end
 	end)
-end)
 
-for _, plr in ipairs(Players:GetPlayers()) do
-	if plr ~= LOCAL_PLAYER then
-		hookCharacter(plr)
+	for model, data in pairs(tracked) do
+		if not model.Parent or not model:FindFirstChildOfClass("Humanoid") then
+			if data.highlight then data.highlight:Destroy() end
+			if data.tag       then data.tag:Destroy()       end
+			tracked[model] = nil
+		end
 	end
+
+	foundCount = found
+
+	if not ok then
+		warn("[KillerostScanner] " .. tostring(err))
+	end
+
+	scanning = false
+	return found
 end
 
---======================== AUTO SCAN LOOP =============================
+--=========================  AUTO RE-SCAN  =================================
+local queued = false
+local function queueRescan()
+	if not autoScan or queued then return end
+	queued = true
+	task.delay(CONFIG.Debounce, function()
+		queued = false
+		if autoScan then fullScan() end
+	end)
+end
+
+Workspace.DescendantAdded:Connect(function(inst)
+	if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("ModuleScript")
+	or inst:IsA("Model") or inst:IsA("Humanoid") or inst:IsA("BasePart") then
+		queueRescan()
+	end
+end)
+Workspace.DescendantRemoving:Connect(queueRescan)
+Workspace.ChildAdded:Connect(queueRescan)
+
 task.spawn(function()
 	while true do
-		task.wait(CONFIG.ScanInterval)
-		scan()
+		if autoScan then
+			task.wait(next(tracked) == nil and CONFIG.ScanInterval or CONFIG.ScanInterval * 2)
+			fullScan()
+		else
+			task.wait(0.5)
+		end
 	end
 end)
 
---========================= INITIAL SCAN ==============================
-scan()
+--==========================================================================
+--                              UI TABS
+--==========================================================================
+
+local Tabs = {
+	PlayerTab  = Window:Tab({
+		Title = "Players",
+		Icon  = "121572094465765",
+	}),
+	ScannerTab = Window:Tab({
+		Title = "Scanner",
+		Icon  = "121572094465765",
+	}),
+	ColorTab   = Window:Tab({
+		Title = "ESP Color",
+		Icon  = "121572094465765",
+	}),
+	AlphaTab   = Window:Tab({
+		Title = "ESP Alpha",
+		Icon  = "121572094465765",
+	}),
+}
+
+--=========================  PLAYER TAB  ===================================
+Tabs.PlayerTab:Toggle({
+	Title = "Noclip",
+	Desc  = "Pass through the Walls",
+	Value = false,
+	Callback = function(state)
+		-- functions
+	end,
+})
+
+--=========================  SCANNER TAB  ==================================
+
+-- Status paragraph (updates on scan)
+local statusParagraph = Tabs.ScannerTab:Paragraph({
+	Title = "Status",
+	Desc  = "Idle...",
+	Color = Grey,
+	Image = "rbxassetid://121572094465765",
+	ImageSize = 24,
+	Locked = false,
+})
+
+local function setStatus(text, color)
+	statusParagraph:SetDesc(text)
+	if color then
+		statusParagraph:SetColor(color)
+	end
+end
+
+-- Result list shown as a paragraph that we refresh on each scan
+local resultsParagraph = Tabs.ScannerTab:Paragraph({
+	Title = "Detected",
+	Desc  = "No matches yet.",
+	Color = Red,
+	Image = "rbxassetid://121572094465765",
+	ImageSize = 24,
+	Locked = false,
+})
+
+local function refreshResultsList()
+	local names = {}
+	for model, data in pairs(tracked) do
+		local scriptName = "?"
+		-- find the killerost script inside this model
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript") then
+				local txt = getScriptText(d)
+				if string.find(string.lower(txt), CONFIG.Keyword, 1, true) then
+					scriptName = d.Name
+					break
+				end
+			end
+		end
+		table.insert(names, "• " .. model.Name .. "  (" .. scriptName .. ")")
+	end
+
+	if #names == 0 then
+		resultsParagraph:SetDesc("No matches yet.")
+	else
+		resultsParagraph:SetDesc(table.concat(names, "\n"))
+	end
+end
+
+-- ESP on/off
+Tabs.ScannerTab:Toggle({
+	Title = "ESP Highlight",
+	Desc  = "Show red highlight + ⚠️ Killer ⚠️ tag on flagged models",
+	Value = true,
+	Callback = function(state)
+		setESPEnabled(state)
+		setStatus(state and "ESP enabled" or "ESP disabled", state and Green or Grey)
+	end,
+})
+
+-- Auto re-scan toggle
+Tabs.ScannerTab:Toggle({
+	Title = "Auto Rescan",
+	Desc  = "Re-scan whenever Workspace changes",
+	Value = true,
+	Callback = function(state)
+		autoScan = state
+		setStatus(state and "Auto-scan enabled" or "Auto-scan paused", state and Green or Grey)
+	end,
+})
+
+-- Manual rescan
+Tabs.ScannerTab:Button({
+	Title = "Rescan Now",
+	Desc  = "Run a full scan immediately",
+	Callback = function()
+		setStatus("Manual scan...", Yellow)
+		task.spawn(function()
+			local n = fullScan()
+			refreshResultsList()
+			if n > 0 then
+				setStatus(("FOUND %d  •  %s"):format(n, os.date("%H:%M:%S")), Red)
+			else
+				setStatus("Scanning... nothing yet", Grey)
+			end
+		end)
+	end,
+})
+
+-- Clear
+Tabs.ScannerTab:Button({
+	Title = "Clear Highlights",
+	Desc  = "Remove all current ESP markers",
+	Callback = function()
+		clearESP()
+		refreshResultsList()
+		setStatus("Cleared", Grey)
+	end,
+})
+
+--=========================  COLOR TAB  ====================================
+
+Tabs.ColorTab:Colorpicker({
+	Title = "Highlight Color",
+	Desc  = "Fill + ⚠️ Killer ⚠️ tag color",
+	Default = CONFIG.Fill,
+	Transparency = 0,
+	Callback = function(color)
+		applyColor(color)
+		setStatus("Color updated", Green)
+	end,
+})
+
+-- Quick preset buttons
+Tabs.ColorTab:Button({
+	Title = "Preset: Red",
+	Callback = function()
+		applyColor(Color3.fromRGB(255, 45, 45))
+		setStatus("Color → Red", Green)
+	end,
+})
+
+Tabs.ColorTab:Button({
+	Title = "Preset: Green",
+	Callback = function()
+		applyColor(Color3.fromRGB(45, 220, 90))
+		setStatus("Color → Green", Green)
+	end,
+})
+
+Tabs.ColorTab:Button({
+	Title = "Preset: Blue",
+	Callback = function()
+		applyColor(Color3.fromRGB(60, 130, 255))
+		setStatus("Color → Blue", Green)
+	end,
+})
+
+Tabs.ColorTab:Button({
+	Title = "Preset: Pink",
+	Callback = function()
+		applyColor(Color3.fromRGB(255, 90, 200))
+		setStatus("Color → Pink", Green)
+	end,
+})
+
+--=========================  ALPHA TAB  ====================================
+
+Tabs.AlphaTab:Slider({
+	Title = "Fill Transparency",
+	Desc  = "0% = solid  •  100% = invisible",
+	Value = { Min = 0, Max = 100, Default = math.floor(CONFIG.FillTransparency * 100 + 0.5) },
+	Callback = function(v)
+		applyFillAlpha(v / 100)
+	end,
+})
+
+Tabs.AlphaTab:Slider({
+	Title = "Outline Transparency",
+	Desc  = "0% = solid  •  100% = invisible",
+	Value = { Min = 0, Max = 100, Default = math.floor(CONFIG.OutlineTransparency * 100 + 0.5) },
+	Callback = function(v)
+		applyOutlineAlpha(v / 100)
+	end,
+})
+
+--=========================  BOOT  =========================================
+setStatus("Initial scan...", Yellow)
+task.spawn(function()
+	fullScan()
+	refreshResultsList()
+	if foundCount > 0 then
+		setStatus(("FOUND %d  •  %s"):format(foundCount, os.date("%H:%M:%S")), Red)
+	else
+		setStatus("Watching workspace...", Grey)
+	end
+end)
+
+print("[KillerostScanner] WindUI edition loaded")
