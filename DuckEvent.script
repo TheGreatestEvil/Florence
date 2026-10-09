@@ -1,0 +1,958 @@
+--==================================================================
+--  SCANNER GUI + PLAYERS + MISC (Fly)  (LocalScript)
+--  Where to put it: StarterPlayer > StarterPlayerScripts
+--
+--  Tabs:
+--    [Ducks]   - workspace.DuckDuck.Ducks scanner + Tp buttons
+--    [Players] - Live player list, click to Tp
+--    [Misc]    - Fly toggle + big fly speed slider
+--
+--  Floating toggle button (draggable) opens/closes the whole window
+--==================================================================
+local Players          = game:GetService("Players")
+local Workspace        = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+
+local player    = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--========================= CONFIG =================================
+local CONFIG = {
+	ContainerName = "DuckDuck",
+	FolderName    = "Ducks",
+	HeightOffset  = 4,
+	AutoRefresh   = true,
+
+	PlayerOffset  = Vector3.new(0, 0, 3),
+
+	WindowSize    = UDim2.new(0, 200, 0, 240),
+	WindowPos     = UDim2.new(0, 12, 0.5, -120),
+
+	FloatingSize  = UDim2.new(0, 48, 0, 48),
+	FloatingPos   = UDim2.new(0, 12, 0, 90),
+
+	DragThreshold = 8,
+
+	FlyMinSpeed   = 10,
+	FlyMaxSpeed   = 300,
+	FlyDefSpeed   = 100,
+}
+
+--======================= SMALL HELPER =============================
+local function new(className, props, parent)
+	local inst = Instance.new(className)
+	for k, v in pairs(props) do
+		inst[k] = v
+	end
+	if parent then inst.Parent = parent end
+	return inst
+end
+
+--========================= TELEPORT ===============================
+local function getModelPosition(model)
+	local part = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+	if part then return part.Position end
+	local ok, cf = pcall(function() return model:GetBoundingBox() end)
+	if ok then return cf.Position end
+	return nil
+end
+
+local function teleportToModel(model)
+	local character = player.Character
+	if not character then return end
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local pos = getModelPosition(model)
+	if not pos then return end
+	hrp.CFrame = CFrame.new(pos + Vector3.new(0, CONFIG.HeightOffset, 0))
+end
+
+local function teleportToPlayer(targetPlayer)
+	if targetPlayer == player then return false, "That's you!" end
+	local character = player.Character
+	if not character then return false, "No character" end
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return false, "No HumanoidRootPart" end
+	local targetChar = targetPlayer.Character
+	if not targetChar then return false, targetPlayer.Name .. " has no character" end
+	local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
+	if not targetHrp then return false, targetPlayer.Name .. " has no HRP" end
+	local lookCF = CFrame.new(targetHrp.Position, targetHrp.Position + targetHrp.CFrame.LookVector)
+	hrp.CFrame = lookCF + CONFIG.PlayerOffset
+	return true
+end
+
+--=========================== GUI ==================================
+local screenGui = new("ScreenGui", {
+	Name = "DuckScannerGui",
+	ResetOnSpawn = false,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	IgnoreGuiInset = true,
+}, playerGui)
+
+local main = new("Frame", {
+	Name = "Main",
+	Position = CONFIG.WindowPos,
+	Size = CONFIG.WindowSize,
+	BackgroundColor3 = Color3.fromRGB(24, 24, 28),
+	BorderSizePixel = 0,
+	Active = true,
+}, screenGui)
+new("UICorner", { CornerRadius = UDim.new(0, 8) }, main)
+new("UIStroke", { Color = Color3.fromRGB(60, 60, 72), Thickness = 1 }, main)
+new("UISizeConstraint", { MinSize = Vector2.new(170, 200), MaxSize = Vector2.new(260, 360) }, main)
+
+-- Header -----------------------------------------------------------
+local header = new("Frame", {
+	Name = "Header",
+	Size = UDim2.new(1, 0, 0, 26),
+	BackgroundColor3 = Color3.fromRGB(35, 35, 43),
+	BorderSizePixel = 0,
+}, main)
+new("UICorner", { CornerRadius = UDim.new(0, 8) }, header)
+
+new("TextLabel", {
+	Name = "Title",
+	Position = UDim2.new(0, 8, 0, 0),
+	Size = UDim2.new(1, -50, 1, 0),
+	BackgroundTransparency = 1,
+	Text = "🔍 Scanner GUI",
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Font = Enum.Font.GothamBold,
+	TextSize = 12,
+	TextColor3 = Color3.fromRGB(235, 235, 245),
+}, header)
+
+local minimizeBtn = new("TextButton", {
+	Name = "Minimize",
+	AnchorPoint = Vector2.new(1, 0.5),
+	Position = UDim2.new(1, -6, 0.5, 0),
+	Size = UDim2.new(0, 22, 0, 18),
+	BackgroundColor3 = Color3.fromRGB(55, 55, 68),
+	BorderSizePixel = 0,
+	Text = "–",
+	Font = Enum.Font.GothamBold,
+	TextSize = 14,
+	TextColor3 = Color3.fromRGB(230, 230, 240),
+	AutoButtonColor = true,
+}, header)
+new("UICorner", { CornerRadius = UDim.new(0, 5) }, minimizeBtn)
+
+-- Tab bar ----------------------------------------------------------
+local tabBar = new("Frame", {
+	Name = "TabBar",
+	Position = UDim2.new(0, 0, 0, 26),
+	Size = UDim2.new(1, 0, 0, 24),
+	BackgroundColor3 = Color3.fromRGB(30, 30, 37),
+	BorderSizePixel = 0,
+}, main)
+new("UIListLayout", {
+	FillDirection = Enum.FillDirection.Horizontal,
+	Padding = UDim.new(0, 4),
+	SortOrder = Enum.SortOrder.LayoutOrder,
+	VerticalAlignment = Enum.VerticalAlignment.Center,
+}, tabBar)
+new("UIPadding", {
+	PaddingLeft = UDim.new(0, 6),
+	PaddingRight = UDim.new(0, 6),
+}, tabBar)
+
+local content = new("Frame", {
+	Name = "Content",
+	Position = UDim2.new(0, 0, 0, 50),
+	Size = UDim2.new(1, 0, 1, -50),
+	BackgroundTransparency = 1,
+	ClipsDescendants = true,
+}, main)
+
+--======================== TAB SYSTEM ==============================
+local tabs = {}
+local activeTab = nil
+
+local function showTab(name)
+	if activeTab == name then return end
+	activeTab = name
+	for tabName, tab in pairs(tabs) do
+		tab.page.Visible = (tabName == name)
+		tab.button.BackgroundColor3 = (tabName == name)
+			and Color3.fromRGB(58, 128, 220)
+			or Color3.fromRGB(45, 45, 55)
+		tab.button.TextColor3 = (tabName == name)
+			and Color3.fromRGB(255, 255, 255)
+			or Color3.fromRGB(200, 200, 215)
+	end
+end
+
+local function createTab(name, label)
+	local button = new("TextButton", {
+		Name = name .. "Tab",
+		Size = UDim2.new(0, 58, 0, 18),
+		BackgroundColor3 = Color3.fromRGB(45, 45, 55),
+		BorderSizePixel = 0,
+		Text = label,
+		Font = Enum.Font.GothamBold,
+		TextSize = 11,
+		TextColor3 = Color3.fromRGB(200, 200, 215),
+		AutoButtonColor = true,
+	}, tabBar)
+	new("UICorner", { CornerRadius = UDim.new(0, 5) }, button)
+
+	local page = new("Frame", {
+		Name = name .. "Page",
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundTransparency = 1,
+		Visible = false,
+	}, content)
+
+	tabs[name] = { button = button, page = page }
+	button.MouseButton1Click:Connect(function() showTab(name) end)
+	return page
+end
+
+--==================================================================
+--  DUCKS TAB
+--==================================================================
+local ducksPage = createTab("Ducks", "Ducks")
+
+local status = new("TextLabel", {
+	Name = "Status",
+	Position = UDim2.new(0, 8, 0, 4),
+	Size = UDim2.new(1, -40, 0, 16),
+	BackgroundTransparency = 1,
+	Text = "Scanning...",
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	Font = Enum.Font.Gotham,
+	TextSize = 10,
+	TextColor3 = Color3.fromRGB(150, 150, 165),
+}, ducksPage)
+
+local refreshBtn = new("TextButton", {
+	Name = "Refresh",
+	AnchorPoint = Vector2.new(1, 0),
+	Position = UDim2.new(1, -8, 0, 3),
+	Size = UDim2.new(0, 24, 0, 18),
+	BackgroundColor3 = Color3.fromRGB(55, 55, 68),
+	BorderSizePixel = 0,
+	Text = "⟳",
+	Font = Enum.Font.GothamBold,
+	TextSize = 13,
+	TextColor3 = Color3.fromRGB(230, 230, 240),
+	AutoButtonColor = true,
+}, ducksPage)
+new("UICorner", { CornerRadius = UDim.new(0, 5) }, refreshBtn)
+
+local scroll = new("ScrollingFrame", {
+	Name = "List",
+	Position = UDim2.new(0, 6, 0, 24),
+	Size = UDim2.new(1, -12, 1, -30),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	ScrollBarThickness = 4,
+	ScrollBarImageColor3 = Color3.fromRGB(90, 90, 105),
+	CanvasSize = UDim2.new(0, 0, 0, 0),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+}, ducksPage)
+new("UIListLayout", {
+	Padding = UDim.new(0, 4),
+	SortOrder = Enum.SortOrder.LayoutOrder,
+}, scroll)
+
+local function clearList()
+	for _, child in ipairs(scroll:GetChildren()) do
+		if child:IsA("Frame") then child:Destroy() end
+	end
+end
+
+local function createEntry(model, index)
+	local row = new("Frame", {
+		Name = model.Name,
+		Size = UDim2.new(1, -4, 0, 26),
+		BackgroundColor3 = Color3.fromRGB(38, 38, 47),
+		BorderSizePixel = 0,
+		LayoutOrder = index,
+	}, scroll)
+	new("UICorner", { CornerRadius = UDim.new(0, 5) }, row)
+
+	new("TextLabel", {
+		Name = "ModelName",
+		Position = UDim2.new(0, 6, 0, 0),
+		Size = UDim2.new(1, -56, 1, 0),
+		BackgroundTransparency = 1,
+		Text = model.Name,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Font = Enum.Font.Gotham,
+		TextSize = 11,
+		TextColor3 = Color3.fromRGB(220, 220, 232),
+	}, row)
+
+	local tpButton = new("TextButton", {
+		Name = "Tp",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -4, 0.5, 0),
+		Size = UDim2.new(0, 42, 0, 18),
+		BackgroundColor3 = Color3.fromRGB(58, 128, 220),
+		BorderSizePixel = 0,
+		Text = "Tp",
+		Font = Enum.Font.GothamBold,
+		TextSize = 11,
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		AutoButtonColor = true,
+	}, row)
+	new("UICorner", { CornerRadius = UDim.new(0, 5) }, tpButton)
+
+	tpButton.MouseButton1Click:Connect(function()
+		teleportToModel(model)
+		status.Text = "Teleported → " .. model.Name
+	end)
+end
+
+local scanning = false
+local function scan()
+	if scanning then return end
+	scanning = true
+	clearList()
+
+	local container = Workspace:FindFirstChild(CONFIG.ContainerName)
+	if not container then
+		status.Text = "❌ " .. CONFIG.ContainerName .. " not found"
+		scanning = false
+		return
+	end
+	local folder = container:FindFirstChild(CONFIG.FolderName)
+	if not folder then
+		status.Text = "❌ " .. CONFIG.FolderName .. " not found"
+		scanning = false
+		return
+	end
+
+	local count = 0
+	for _, model in ipairs(folder:GetChildren()) do
+		if model:IsA("Model") then
+			count += 1
+			createEntry(model, count)
+		end
+	end
+	status.Text = ("Found %d model%s"):format(count, count == 1 and "" or "s")
+	scanning = false
+end
+
+refreshBtn.MouseButton1Click:Connect(scan)
+
+if CONFIG.AutoRefresh then
+	task.spawn(function()
+		local container = Workspace:WaitForChild(CONFIG.ContainerName, 30)
+		if not container then return end
+		local folder = container:WaitForChild(CONFIG.FolderName, 30)
+		if not folder then return end
+		local function queueScan() task.defer(scan) end
+		folder.ChildAdded:Connect(queueScan)
+		folder.ChildRemoved:Connect(queueScan)
+	end)
+end
+
+--==================================================================
+--  PLAYERS TAB
+--==================================================================
+local playersPage = createTab("Players", "Players")
+
+local playerStatus = new("TextLabel", {
+	Name = "Status",
+	Position = UDim2.new(0, 8, 0, 4),
+	Size = UDim2.new(1, -40, 0, 16),
+	BackgroundTransparency = 1,
+	Text = "Loading...",
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	Font = Enum.Font.Gotham,
+	TextSize = 10,
+	TextColor3 = Color3.fromRGB(150, 150, 165),
+}, playersPage)
+
+local playerRefreshBtn = new("TextButton", {
+	Name = "Refresh",
+	AnchorPoint = Vector2.new(1, 0),
+	Position = UDim2.new(1, -8, 0, 3),
+	Size = UDim2.new(0, 24, 0, 18),
+	BackgroundColor3 = Color3.fromRGB(55, 55, 68),
+	BorderSizePixel = 0,
+	Text = "⟳",
+	Font = Enum.Font.GothamBold,
+	TextSize = 13,
+	TextColor3 = Color3.fromRGB(230, 230, 240),
+	AutoButtonColor = true,
+}, playersPage)
+new("UICorner", { CornerRadius = UDim.new(0, 5) }, playerRefreshBtn)
+
+local playerScroll = new("ScrollingFrame", {
+	Name = "List",
+	Position = UDim2.new(0, 6, 0, 24),
+	Size = UDim2.new(1, -12, 1, -30),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	ScrollBarThickness = 4,
+	ScrollBarImageColor3 = Color3.fromRGB(90, 90, 105),
+	CanvasSize = UDim2.new(0, 0, 0, 0),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+}, playersPage)
+new("UIListLayout", {
+	Padding = UDim.new(0, 4),
+	SortOrder = Enum.SortOrder.LayoutOrder,
+}, playerScroll)
+
+local function clearPlayerList()
+	for _, child in ipairs(playerScroll:GetChildren()) do
+		if child:IsA("TextButton") then child:Destroy() end
+	end
+end
+
+local function refreshPlayerList()
+	clearPlayerList()
+	local list = Players:GetPlayers()
+	table.sort(list, function(a, b)
+		return a.Name:lower() < b.Name:lower()
+	end)
+
+	for i, plr in ipairs(list) do
+		local isMe = (plr == player)
+		local nameBtn = new("TextButton", {
+			Name = plr.Name,
+			Size = UDim2.new(1, -4, 0, 24),
+			BackgroundColor3 = isMe
+				and Color3.fromRGB(60, 90, 140)
+				or Color3.fromRGB(38, 38, 47),
+			BorderSizePixel = 0,
+			Text = isMe and (plr.Name .. " (You)") or plr.Name,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Font = Enum.Font.Gotham,
+			TextSize = 11,
+			TextColor3 = Color3.fromRGB(220, 220, 232),
+			AutoButtonColor = true,
+			LayoutOrder = i,
+		}, playerScroll)
+		new("UICorner", { CornerRadius = UDim.new(0, 5) }, nameBtn)
+		new("UIPadding", { PaddingLeft = UDim.new(0, 6) }, nameBtn)
+
+		nameBtn.MouseButton1Click:Connect(function()
+			local target = Players:FindFirstChild(nameBtn.Name)
+			if not target then
+				playerStatus.Text = "❌ Player left the game"
+				refreshPlayerList()
+				return
+			end
+			if target == player then
+				playerStatus.Text = "That's you!"
+				return
+			end
+			local ok, err = teleportToPlayer(target)
+			if ok then
+				playerStatus.Text = "Teleported → " .. target.Name
+			else
+				playerStatus.Text = "❌ " .. (err or "Failed")
+			end
+		end)
+	end
+	local count = #list
+	playerStatus.Text = ("%d player%s"):format(count, count == 1 and "" or "s")
+end
+
+playerRefreshBtn.MouseButton1Click:Connect(refreshPlayerList)
+Players.PlayerAdded:Connect(function() task.defer(refreshPlayerList) end)
+Players.PlayerRemoving:Connect(function() task.defer(refreshPlayerList) end)
+
+local function watchCharacter(plr)
+	plr.CharacterAdded:Connect(function()
+		task.defer(refreshPlayerList)
+	end)
+end
+for _, plr in ipairs(Players:GetPlayers()) do watchCharacter(plr) end
+Players.PlayerAdded:Connect(watchCharacter)
+
+--==================================================================
+--  MISC TAB  (Fly + speed slider)
+--==================================================================
+local miscPage = createTab("Misc", "Misc")
+
+local miscStatus = new("TextLabel", {
+	Name = "Status",
+	Position = UDim2.new(0, 8, 0, 4),
+	Size = UDim2.new(1, -16, 0, 16),
+	BackgroundTransparency = 1,
+	Text = "Fly disabled",
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	Font = Enum.Font.Gotham,
+	TextSize = 10,
+	TextColor3 = Color3.fromRGB(150, 150, 165),
+}, miscPage)
+
+-- Fly toggle button ------------------------------------------------
+local flyToggleBtn = new("TextButton", {
+	Name = "FlyToggle",
+	Position = UDim2.new(0, 8, 0, 24),
+	Size = UDim2.new(1, -16, 0, 30),
+	BackgroundColor3 = Color3.fromRGB(55, 55, 68),
+	BorderSizePixel = 0,
+	Text = "Fly: OFF",
+	Font = Enum.Font.GothamBold,
+	TextSize = 13,
+	TextColor3 = Color3.fromRGB(230, 230, 240),
+	AutoButtonColor = true,
+}, miscPage)
+new("UICorner", { CornerRadius = UDim.new(0, 6) }, flyToggleBtn)
+
+-- Speed label ------------------------------------------------------
+local speedLabel = new("TextLabel", {
+	Name = "SpeedLabel",
+	Position = UDim2.new(0, 8, 0, 60),
+	Size = UDim2.new(1, -16, 0, 16),
+	BackgroundTransparency = 1,
+	Text = "Speed: " .. CONFIG.FlyDefSpeed,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Font = Enum.Font.Gotham,
+	TextSize = 11,
+	TextColor3 = Color3.fromRGB(200, 200, 215),
+}, miscPage)
+
+-- Big slider -------------------------------------------------------
+local slider = new("Frame", {
+	Name = "SpeedSlider",
+	Position = UDim2.new(0, 8, 0, 78),
+	Size = UDim2.new(1, -16, 0, 34),
+	BackgroundColor3 = Color3.fromRGB(30, 30, 38),
+	BorderSizePixel = 0,
+	Active = true,  -- enables InputBegan on the whole area
+}, miscPage)
+new("UICorner", { CornerRadius = UDim.new(0, 8) }, slider)
+new("UIStroke", { Color = Color3.fromRGB(60, 60, 72), Thickness = 1 }, slider)
+
+local sliderTrack = new("Frame", {
+	Name = "Track",
+	AnchorPoint = Vector2.new(0, 0.5),
+	Position = UDim2.new(0, 14, 0.5, 0),
+	Size = UDim2.new(1, -28, 0, 10),
+	BackgroundColor3 = Color3.fromRGB(50, 50, 62),
+	BorderSizePixel = 0,
+}, slider)
+new("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderTrack)
+
+local sliderFill = new("Frame", {
+	Name = "Fill",
+	Size = UDim2.new(0, 0, 1, 0),
+	BackgroundColor3 = Color3.fromRGB(58, 128, 220),
+	BorderSizePixel = 0,
+}, sliderTrack)
+new("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderFill)
+
+local sliderKnob = new("Frame", {
+	Name = "Knob",
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.new(0, 0, 0.5, 0),
+	Size = UDim2.new(0, 28, 0, 28),
+	BackgroundColor3 = Color3.fromRGB(245, 245, 250),
+	BorderSizePixel = 0,
+	ZIndex = 2,
+}, slider)
+new("UICorner", { CornerRadius = UDim.new(1, 0) }, sliderKnob)
+new("UIStroke", { Color = Color3.fromRGB(58, 128, 220), Thickness = 2 }, sliderKnob)
+
+-- Fly state table --------------------------------------------------
+local flyState = {
+	active = false,
+	speed = CONFIG.FlyDefSpeed,
+	connection = nil,
+	bodyVelocity = nil,
+	savedWalkSpeed = nil,
+	upHeld = false,
+	downHeld = false,
+}
+
+-- Fly logic --------------------------------------------------------
+local function stopFly()
+	flyState.active = false
+
+	if flyState.connection then
+		flyState.connection:Disconnect()
+		flyState.connection = nil
+	end
+	if flyState.bodyVelocity then
+		flyState.bodyVelocity:Destroy()
+		flyState.bodyVelocity = nil
+	end
+
+	local char = player.Character
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			if flyState.savedWalkSpeed then
+				hum.WalkSpeed = flyState.savedWalkSpeed
+			end
+			pcall(function() hum:Move(Vector3.new(), true) end)
+		end
+	end
+	flyState.savedWalkSpeed = nil
+end
+
+local function startFly()
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+
+	flyState.active = true
+	flyState.savedWalkSpeed = hum.WalkSpeed
+	hum.WalkSpeed = 0
+
+	local bv = Instance.new("BodyVelocity")
+	bv.Name = "FlyVelocity"
+	bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+	bv.Velocity = Vector3.zero
+	bv.Parent = hrp
+	flyState.bodyVelocity = bv
+
+	flyState.connection = RunService.RenderStepped:Connect(function()
+		if not hrp.Parent or not hum.Parent then
+			stopFly()
+			flyToggleBtn.Text = "Fly: OFF"
+			flyToggleBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 68)
+			miscStatus.Text = "Fly disabled"
+			return
+		end
+
+		local moveDir = Vector3.zero
+
+		-- Horizontal from humanoid input (covers WASD + mobile joystick)
+		local hDir = hum.MoveDirection
+		if hDir.Magnitude > 0 then
+			moveDir += hDir
+		end
+
+		-- Vertical
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) or flyState.upHeld then
+			moveDir += Vector3.new(0, 1, 0)
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+			or UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
+			or flyState.downHeld then
+			moveDir -= Vector3.new(0, 1, 0)
+		end
+
+		if moveDir.Magnitude > 0 then
+			moveDir = moveDir.Unit
+		end
+
+		bv.Velocity = moveDir * flyState.speed
+	end)
+end
+
+local function setFly(active)
+	if active then
+		startFly()
+		flyToggleBtn.Text = "Fly: ON"
+		flyToggleBtn.BackgroundColor3 = Color3.fromRGB(58, 128, 220)
+		miscStatus.Text = "Flying at speed " .. flyState.speed
+	else
+		stopFly()
+		flyToggleBtn.Text = "Fly: OFF"
+		flyToggleBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 68)
+		miscStatus.Text = "Fly disabled"
+	end
+end
+
+flyToggleBtn.MouseButton1Click:Connect(function()
+	setFly(not flyState.active)
+end)
+
+-- Stop fly on respawn (avoid stale references) --------------------
+player.CharacterAdded:Connect(function()
+	if flyState.active then
+		task.wait(0.1)
+		stopFly()
+		flyToggleBtn.Text = "Fly: OFF"
+		flyToggleBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 68)
+		miscStatus.Text = "Fly disabled"
+	end
+end)
+
+--=============== SLIDER LOGIC (mouse + touch) =====================
+do
+	local dragging = false
+
+	local function valueFromAlpha(alpha)
+		return math.floor(
+			CONFIG.FlyMinSpeed + (CONFIG.FlyMaxSpeed - CONFIG.FlyMinSpeed) * alpha + 0.5
+		)
+	end
+
+	local function updateFromX(xPos)
+		local trackX = sliderTrack.AbsolutePosition.X
+		local trackW = sliderTrack.AbsoluteSize.X
+		if trackW <= 0 then return end
+		local alpha = math.clamp((xPos - trackX) / trackW, 0, 1)
+
+		sliderFill.Size = UDim2.new(alpha, 0, 1, 0)
+		sliderKnob.Position = UDim2.new(alpha, 0, 0.5, 0)
+
+		local val = valueFromAlpha(alpha)
+		flyState.speed = val
+		speedLabel.Text = "Speed: " .. val
+		if flyState.active then
+			miscStatus.Text = "Flying at speed " .. val
+		end
+	end
+
+	-- Initialize slider position to default speed
+	local initAlpha = (CONFIG.FlyDefSpeed - CONFIG.FlyMinSpeed)
+		/ (CONFIG.FlyMaxSpeed - CONFIG.FlyMinSpeed)
+	sliderFill.Size = UDim2.new(initAlpha, 0, 1, 0)
+	sliderKnob.Position = UDim2.new(initAlpha, 0, 0.5, 0)
+
+	slider.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			updateFromX(input.Position.X)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not dragging then return end
+		if input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch then
+			updateFromX(input.Position.X)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+end
+
+--=============== UP/DOWN HOLD BUTTONS (mobile) ====================
+do
+	local upBtn = new("TextButton", {
+		Name = "UpBtn",
+		Position = UDim2.new(0, 8, 0, 120),
+		Size = UDim2.new(0.5, -12, 0, 30),
+		BackgroundColor3 = Color3.fromRGB(55, 55, 68),
+		BorderSizePixel = 0,
+		Text = "⬆ Up",
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		TextColor3 = Color3.fromRGB(230, 230, 240),
+		AutoButtonColor = true,
+	}, miscPage)
+	new("UICorner", { CornerRadius = UDim.new(0, 6) }, upBtn)
+
+	local downBtn = new("TextButton", {
+		Name = "DownBtn",
+		Position = UDim2.new(0.5, 4, 0, 120),
+		Size = UDim2.new(0.5, -12, 0, 30),
+		BackgroundColor3 = Color3.fromRGB(55, 55, 68),
+		BorderSizePixel = 0,
+		Text = "⬇ Down",
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		TextColor3 = Color3.fromRGB(230, 230, 240),
+		AutoButtonColor = true,
+	}, miscPage)
+	new("UICorner", { CornerRadius = UDim.new(0, 6) }, downBtn)
+
+	local upInput, downInput
+
+	upBtn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			flyState.upHeld = true
+			upInput = input
+		end
+	end)
+	upBtn.InputEnded:Connect(function(input)
+		if input == upInput then
+			flyState.upHeld = false
+			upInput = nil
+		end
+	end)
+
+	downBtn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			flyState.downHeld = true
+			downInput = input
+		end
+	end)
+	downBtn.InputEnded:Connect(function(input)
+		if input == downInput then
+			flyState.downHeld = false
+			downInput = nil
+		end
+	end)
+
+	-- Failsafe: if the input ends anywhere on screen
+	UserInputService.InputEnded:Connect(function(input)
+		if input == upInput then
+			flyState.upHeld = false
+			upInput = nil
+		end
+		if input == downInput then
+			flyState.downHeld = false
+			downInput = nil
+		end
+	end)
+end
+
+--===================== DRAG THE MAIN WINDOW =======================
+do
+	local dragging, dragStart, startPos
+
+	local function beginDrag(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		dragging = true
+		dragStart = input.Position
+		startPos = main.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+
+	header.InputBegan:Connect(beginDrag)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not dragging then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement
+			and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		local delta = input.Position - dragStart
+		main.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+	end)
+end
+
+--===================== MINIMIZE TOGGLE ============================
+do
+	local minimized = false
+	local fullSize = CONFIG.WindowSize
+
+	minimizeBtn.MouseButton1Click:Connect(function()
+		minimized = not minimized
+		if minimized then
+			main.Size = UDim2.new(0, 200, 0, 26)
+			tabBar.Visible = false
+			content.Visible = false
+			minimizeBtn.Text = "+"
+		else
+			main.Size = fullSize
+			tabBar.Visible = true
+			content.Visible = true
+			minimizeBtn.Text = "–"
+		end
+	end)
+end
+
+--==================================================================
+--  FLOATING TOGGLE BUTTON (draggable on PC + mobile)
+--==================================================================
+local floating = new("TextButton", {
+	Name = "FloatingToggle",
+	Position = CONFIG.FloatingPos,
+	Size = CONFIG.FloatingSize,
+	BackgroundColor3 = Color3.fromRGB(58, 128, 220),
+	BorderSizePixel = 0,
+	Text = "🔍",
+	Font = Enum.Font.GothamBold,
+	TextSize = 22,
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	AutoButtonColor = false,
+	Active = true,
+	ZIndex = 5,
+}, screenGui)
+new("UICorner", { CornerRadius = UDim.new(1, 0) }, floating)
+new("UIStroke", { Color = Color3.fromRGB(90, 90, 105), Thickness = 1 }, floating)
+
+do
+	local dragging     = false
+	local dragStart    = nil
+	local startPos     = nil
+	local moved        = false
+	local pressBegan   = 0
+
+	local function beginDrag(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		dragging    = true
+		moved       = false
+		pressBegan  = os.clock()
+		dragStart   = input.Position
+		startPos    = floating.Position
+		floating.BackgroundColor3 = Color3.fromRGB(72, 148, 240)
+	end
+
+	local function endDrag()
+		if not dragging then return end
+		dragging = false
+		floating.BackgroundColor3 = Color3.fromRGB(58, 128, 220)
+		if not moved and (os.clock() - pressBegan) < 0.6 then
+			main.Visible = not main.Visible
+		end
+	end
+
+	floating.InputBegan:Connect(beginDrag)
+	floating.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			endDrag()
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not dragging then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement
+			and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		local delta = input.Position - dragStart
+		if math.abs(delta.X) > CONFIG.DragThreshold
+			or math.abs(delta.Y) > CONFIG.DragThreshold then
+			moved = true
+		end
+		floating.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch) then
+			endDrag()
+		end
+	end)
+end
+
+--========================= RUN ====================================
+showTab("Ducks")
+scan()
+refreshPlayerList()
