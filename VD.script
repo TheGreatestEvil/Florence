@@ -255,7 +255,7 @@ local CONFIG = {
 
 --=========================  SCAN CORE  ====================================
 
-local tracked    = {}     -- [model] = { highlight, tag, label }
+local tracked    = {}     -- [model] = { highlight, tag, label, scriptName }
 local autoScan   = true
 local espEnabled = true
 
@@ -330,7 +330,8 @@ local function applyESP(model, scriptObj)
 		lbl.Parent                 = tag
 	end
 
-	tracked[model] = { highlight = hl, tag = tag, label = lbl }
+	-- Store script name directly so the UI doesn't have to re-scan
+	tracked[model] = { highlight = hl, tag = tag, label = lbl, scriptName = scriptObj.Name }
 end
 
 local function clearESP()
@@ -431,36 +432,21 @@ end)
 Workspace.DescendantRemoving:Connect(queueRescan)
 Workspace.ChildAdded:Connect(queueRescan)
 
-task.spawn(function()
-	while true do
-		if autoScan then
-			task.wait(next(tracked) == nil and CONFIG.ScanInterval or CONFIG.ScanInterval * 2)
-			fullScan()
-		else
-			task.wait(0.5)
-		end
-	end
-end)
-
 --==========================================================================
 --                              UI TABS
 --==========================================================================
 
 local Tabs = {
-	PlayerTab  = Window:Tab({
+	PlayerTab     = Window:Tab({
 		Title = "Players",
 		Icon  = "121572094465765",
 	}),
-	ScannerTab = Window:Tab({
+	ScannerTab    = Window:Tab({
 		Title = "Scanner",
 		Icon  = "121572094465765",
 	}),
-	ColorTab   = Window:Tab({
-		Title = "ESP Color",
-		Icon  = "121572094465765",
-	}),
-	AlphaTab   = Window:Tab({
-		Title = "ESP Alpha",
+	CustomizerTab = Window:Tab({
+		Title = "ESP Customizer",
 		Icon  = "121572094465765",
 	}),
 }
@@ -507,17 +493,7 @@ local resultsParagraph = Tabs.ScannerTab:Paragraph({
 local function refreshResultsList()
 	local names = {}
 	for model, data in pairs(tracked) do
-		local scriptName = "?"
-		-- find the killerost script inside this model
-		for _, d in ipairs(model:GetDescendants()) do
-			if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript") then
-				local txt = getScriptText(d)
-				if string.find(string.lower(txt), CONFIG.Keyword, 1, true) then
-					scriptName = d.Name
-					break
-				end
-			end
-		end
+		local scriptName = data.scriptName or "?"
 		table.insert(names, "• " .. model.Name .. "  (" .. scriptName .. ")")
 	end
 
@@ -557,8 +533,12 @@ Tabs.ScannerTab:Button({
 	Callback = function()
 		setStatus("Manual scan...", Yellow)
 		task.spawn(function()
+			-- Wait for any ongoing scan to finish
+			while scanning do task.wait(0.1) end
+			
 			local n = fullScan()
 			refreshResultsList()
+			
 			if n > 0 then
 				setStatus(("FOUND %d  •  %s"):format(n, os.date("%H:%M:%S")), Red)
 			else
@@ -579,9 +559,16 @@ Tabs.ScannerTab:Button({
 	end,
 })
 
---=========================  COLOR TAB  ====================================
+--=========================  ESP CUSTOMIZER TAB  ===========================
+-- Color + Alpha live in the SAME tab now
 
-Tabs.ColorTab:Colorpicker({
+Tabs.CustomizerTab:Section({
+	Title = "Color",
+	TextXAlignment = "Left",
+	TextSize = 17,
+})
+
+Tabs.CustomizerTab:Colorpicker({
 	Title = "Highlight Color",
 	Desc  = "Fill + ⚠️ Killer ⚠️ tag color",
 	Default = CONFIG.Fill,
@@ -592,8 +579,7 @@ Tabs.ColorTab:Colorpicker({
 	end,
 })
 
--- Quick preset buttons
-Tabs.ColorTab:Button({
+Tabs.CustomizerTab:Button({
 	Title = "Preset: Red",
 	Callback = function()
 		applyColor(Color3.fromRGB(255, 45, 45))
@@ -601,7 +587,7 @@ Tabs.ColorTab:Button({
 	end,
 })
 
-Tabs.ColorTab:Button({
+Tabs.CustomizerTab:Button({
 	Title = "Preset: Green",
 	Callback = function()
 		applyColor(Color3.fromRGB(45, 220, 90))
@@ -609,7 +595,7 @@ Tabs.ColorTab:Button({
 	end,
 })
 
-Tabs.ColorTab:Button({
+Tabs.CustomizerTab:Button({
 	Title = "Preset: Blue",
 	Callback = function()
 		applyColor(Color3.fromRGB(60, 130, 255))
@@ -617,7 +603,7 @@ Tabs.ColorTab:Button({
 	end,
 })
 
-Tabs.ColorTab:Button({
+Tabs.CustomizerTab:Button({
 	Title = "Preset: Pink",
 	Callback = function()
 		applyColor(Color3.fromRGB(255, 90, 200))
@@ -625,9 +611,13 @@ Tabs.ColorTab:Button({
 	end,
 })
 
---=========================  ALPHA TAB  ====================================
+Tabs.CustomizerTab:Section({
+	Title = "Transparency",
+	TextXAlignment = "Left",
+	TextSize = 17,
+})
 
-Tabs.AlphaTab:Slider({
+Tabs.CustomizerTab:Slider({
 	Title = "Fill Transparency",
 	Desc  = "0% = solid  •  100% = invisible",
 	Value = { Min = 0, Max = 100, Default = math.floor(CONFIG.FillTransparency * 100 + 0.5) },
@@ -636,7 +626,7 @@ Tabs.AlphaTab:Slider({
 	end,
 })
 
-Tabs.AlphaTab:Slider({
+Tabs.CustomizerTab:Slider({
 	Title = "Outline Transparency",
 	Desc  = "0% = solid  •  100% = invisible",
 	Value = { Min = 0, Max = 100, Default = math.floor(CONFIG.OutlineTransparency * 100 + 0.5) },
@@ -645,7 +635,20 @@ Tabs.AlphaTab:Slider({
 	end,
 })
 
---=========================  BOOT  =========================================
+--=========================  AUTO UI REFRESH & BOOT  =======================
+-- Start the auto-scan loop and ensure the UI refreshes every cycle
+task.spawn(function()
+	while true do
+		if autoScan then
+			task.wait(next(tracked) == nil and CONFIG.ScanInterval or CONFIG.ScanInterval * 2)
+			fullScan()
+			refreshResultsList()  -- This keeps the "Detected" list in sync automatically
+		else
+			task.wait(0.5)
+		end
+	end
+end)
+
 setStatus("Initial scan...", Yellow)
 task.spawn(function()
 	fullScan()
